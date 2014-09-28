@@ -30,8 +30,14 @@ All happens in background without using your workers. This means you can manage 
 Installation
 ============
 
+The plugin is 2.0 compatible
+
 The first example: SSE
 ======================
+
+We want to "push" news to all connected clients (browsers) using SSE (HTML5 Server Sent Events).
+
+Each client will subscribe to a "news" channel and will start waiting for messages directly enqueued in redis.
 
 More SSE
 ========
