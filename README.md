@@ -16,7 +16,7 @@ Offloading is a pretty unique uWSGI feature allowing your app to delegate common
 
 In its core uWSGI allows the use of offloading for serving static files and for proxying between instances.
 
-This plugin allows you to delegate a bunch of common realtime-related tasks to offload threads. It is a not silver bullet but instead tries to identify some common scenario for modern webapps.
+This plugin allows you to delegate a bunch of common realtime-related tasks to offload threads. It is not a silver bullet but instead tries to identify some common scenario for modern webapps.
 
 How it works
 ============
