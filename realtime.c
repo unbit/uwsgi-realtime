@@ -50,15 +50,15 @@ error:
 	return NULL;
 }
 
-static int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, uint16_t channel_len) {
+static int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, uint16_t channel_len, uint64_t custom) {
 	struct uwsgi_offload_request uor;
 	// empty channel ?
 	if (channel_len == 0) return -1;
 	uwsgi_offload_setup(realtime_redis_offload_engine, &uor, wsgi_req, 1);
         uor.name = "127.0.0.1:6379";
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
-	// set sse as the message builder
-	uor.buf_pos = 1;
+	// set message builder (use buf_pos as storage)
+	uor.buf_pos = custom;
 	if (uwsgi_buffer_append(uor.ubuf, "*2\r\n$9\r\nSUBSCRIBE\r\n$", 20)) goto error;
 	if (uwsgi_buffer_num64(uor.ubuf, channel_len)) goto error;
 	if (uwsgi_buffer_append(uor.ubuf, "\r\n", 2)) goto error;
@@ -91,7 +91,7 @@ static int sse_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur
 		if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
 	}
 
-	if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos)) {
+	if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
 		wsgi_req->via = UWSGI_VIA_OFFLOAD;
 		wsgi_req->status = 202;
 	}
@@ -105,6 +105,14 @@ static int sse_router(struct uwsgi_route *ur, char *args) {
 	ur->data = args;
 	ur->data_len = strlen(args);
 	return 0;
+}
+
+static int sseraw_router(struct uwsgi_route *ur, char *args) {
+        ur->func = sse_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+	ur->custom = 1;
+        return 0;
 }
 
 static int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
@@ -244,7 +252,7 @@ static int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsg
 static void realtime_register() {
 	realtime_redis_offload_engine = uwsgi_offload_register_engine("realtime-redis", realtime_redis_offload_engine_prepare, realtime_redis_offload_engine_do);
 	uwsgi_register_router("sse", sse_router);
-	uwsgi_register_router("sseraw", sse_router);
+	uwsgi_register_router("sseraw", sseraw_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {
