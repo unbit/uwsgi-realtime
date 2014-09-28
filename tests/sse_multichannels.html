@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+</head>
+<body>
+  <script>
+    function register_channel(num) {
+	var source = new EventSource('/events/'+num);
+	source.onmessage = function(e) {
+                document.getElementById('channel_'+num).innerHTML += e.data.replace(/\n/g, '<br/>') + '<hr>';
+        };
+    }
+    for(var i=1;i<=5;i++) {
+	register_channel(i);
+    }
+  </script>
+</body>
+<div id="channel_1"><h1>channel 1</h1></div>
+<div id="channel_2"><h1>channel 2</h1></div>
+<div id="channel_3"><h1>channel 3</h1></div>
+<div id="channel_4"><h1>channel 4</h1></div>
+<div id="channel_5"><h1>channel 5</h1></div>
+</html>

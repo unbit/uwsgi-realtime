@@ -76,6 +76,12 @@ static int sse_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur
 		return UWSGI_ROUTE_BREAK;
 	}
 
+	char **subject = (char **) (((char *)(wsgi_req))+ur->subject);
+        uint16_t *subject_len = (uint16_t *)  (((char *)(wsgi_req))+ur->subject_len);
+
+        struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
+        if (!ub) return UWSGI_ROUTE_BREAK;
+
 	if (!wsgi_req->headers_sent) {
 		if (!wsgi_req->headers_size) {
 			if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
@@ -85,10 +91,11 @@ static int sse_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur
 		if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
 	}
 
-	if (!realtime_redis_offload(wsgi_req, "uwsgi", 5)) {
+	if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos)) {
 		wsgi_req->via = UWSGI_VIA_OFFLOAD;
 		wsgi_req->status = 202;
 	}
+	uwsgi_buffer_destroy(ub);
 end:
 	return UWSGI_ROUTE_BREAK;
 }
