@@ -100,6 +100,26 @@ end:
 	return UWSGI_ROUTE_BREAK;
 }
 
+static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
+        if (!wsgi_req->socket->can_offload) {
+                uwsgi_log("[realtime] unable to use \"stream\" router without offloading\n");
+                return UWSGI_ROUTE_BREAK;
+        }
+
+        char **subject = (char **) (((char *)(wsgi_req))+ur->subject);
+        uint16_t *subject_len = (uint16_t *)  (((char *)(wsgi_req))+ur->subject_len);
+
+        struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
+        if (!ub) return UWSGI_ROUTE_BREAK;
+
+        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, 0)) {
+                wsgi_req->via = UWSGI_VIA_OFFLOAD;
+                wsgi_req->status = 202;
+        }
+        uwsgi_buffer_destroy(ub);
+        return UWSGI_ROUTE_BREAK;
+}
+
 static int sse_router(struct uwsgi_route *ur, char *args) {
 	ur->func = sse_router_func;
 	ur->data = args;
@@ -112,6 +132,13 @@ static int sseraw_router(struct uwsgi_route *ur, char *args) {
         ur->data = args;
         ur->data_len = strlen(args);
 	ur->custom = 1;
+        return 0;
+}
+
+static int stream_router(struct uwsgi_route *ur, char *args) {
+        ur->func = stream_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
         return 0;
 }
 
@@ -253,6 +280,7 @@ static void realtime_register() {
 	realtime_redis_offload_engine = uwsgi_offload_register_engine("realtime-redis", realtime_redis_offload_engine_prepare, realtime_redis_offload_engine_do);
 	uwsgi_register_router("sse", sse_router);
 	uwsgi_register_router("sseraw", sseraw_router);
+	uwsgi_register_router("stream", stream_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {
