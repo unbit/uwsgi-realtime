@@ -98,6 +98,8 @@ Socket.io and Engine.io
 Streaming
 =========
 
+Why limiting to text messages ? The redis pubsub system can carry binary data too, so we can use it to stream audio and video blobs.
+
 Building an icecast2 compatible server
 ======================================
 
