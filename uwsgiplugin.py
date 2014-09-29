@@ -1,2 +1,2 @@
 NAME='realtime'
-GCC_LIST=['realtime', 'redis']
+GCC_LIST=['realtime', 'redis', 'offload', 'sse']
