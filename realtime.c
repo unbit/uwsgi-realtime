@@ -20,6 +20,36 @@ extern struct uwsgi_server uwsgi;
 
 struct uwsgi_offload_engine *realtime_redis_offload_engine;
 
+// engine.io encoder
+static int eio_build(struct uwsgi_buffer *ub, char *type) {
+	int ret = -1;
+	if (uwsgi_buffer_insert(ub, 0, type, 1)) return -1;
+	uint64_t len = ub->pos;
+	if (uwsgi_buffer_insert(ub, 0, "\0", 1)) return -1;
+	size_t pos = 1;	
+	char *slen = uwsgi_64bit2str(len);
+	char *ptr = slen;
+	uwsgi_log("PTR = %s\n", ptr);
+	while(*ptr) {
+		char num = *ptr - '0';
+		uwsgi_log("num = %d\n", num);
+		if (uwsgi_buffer_insert(ub, pos, &num, 1)) goto error;
+		ptr++;
+		pos++;
+	}
+	char end = 0xff;
+	if (uwsgi_buffer_insert(ub, pos, &end, 1)) goto error;
+	uwsgi_log("%x\n", ub->buf[0]);
+	uwsgi_log("%x\n", ub->buf[1]);
+	uwsgi_log("%x\n", ub->buf[2]);
+	uwsgi_log("%x\n", ub->buf[3]);
+	uwsgi_log("%x\n", ub->buf[4]);
+	ret = 0;
+error:
+	free(slen);
+	return ret;
+}
+
 static char *sse_build(char *message, int64_t message_len, uint64_t *final_len) {
 	int64_t i;
 	struct uwsgi_buffer *ub = uwsgi_buffer_new(message_len);
@@ -100,6 +130,65 @@ end:
 	return UWSGI_ROUTE_BREAK;
 }
 
+static int socketio_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
+        if (!wsgi_req->socket->can_offload) {
+                uwsgi_log("[realtime] unable to use \"socketio\" router without offloading\n");
+                return UWSGI_ROUTE_BREAK;
+        }
+
+        char **subject = (char **) (((char *)(wsgi_req))+ur->subject);
+        uint16_t *subject_len = (uint16_t *)  (((char *)(wsgi_req))+ur->subject_len);
+
+        struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
+        if (!ub) return UWSGI_ROUTE_BREAK;
+
+	uint16_t sid_len = 0;
+	char *sid = uwsgi_get_qs(wsgi_req, "sid", 3, &sid_len);
+	// HANDSHAKE ???
+	if (!sid) {
+		if (!wsgi_req->headers_sent) {
+			if (!wsgi_req->headers_size) {
+				if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
+                        	if (uwsgi_response_add_content_type(wsgi_req, "application/octet-stream", 24)) goto end;
+                        	if (uwsgi_response_add_header(wsgi_req, "Access-Control-Allow-Origin", 27, "*", 1)) goto end;
+                        	if (uwsgi_response_add_header(wsgi_req, "Connection", 10, "Keep-Alive", 10)) goto end;
+			}
+			if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;	
+		}
+		// if no body has been sent, let's generate the json
+		// {"sid":"SID","upgrades":["polling"],"pingTimeout":30000}
+		if (wsgi_req->response_size == 0) {
+			struct uwsgi_buffer *ubody = uwsgi_buffer_new(uwsgi.page_size);
+			if (uwsgi_buffer_append(ubody, "{\"sid\":\"", 8)) goto error;
+			if (uwsgi_buffer_append(ubody, ub->buf, ub->pos)) goto error;
+			if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[\"polling\"],\"pingTimeout\":30000}", 45)) goto error;
+			if (eio_build(ubody, "0")) goto error;
+			uwsgi_response_write_body_do(wsgi_req, ubody->buf, ubody->pos);
+error:
+			uwsgi_buffer_destroy(ubody);
+		}
+		goto end;
+	}
+
+        if (!wsgi_req->headers_sent) {
+                if (!wsgi_req->headers_size) {
+                        if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
+                        if (uwsgi_response_add_content_type(wsgi_req, "text/event-stream", 17)) goto end;
+                        if (uwsgi_response_add_header(wsgi_req, "Cache-Control", 13, "no-cache", 8)) goto end;
+                }
+                if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+        }
+
+        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
+                wsgi_req->via = UWSGI_VIA_OFFLOAD;
+                wsgi_req->status = 202;
+        }
+end:
+        uwsgi_buffer_destroy(ub);
+        return UWSGI_ROUTE_BREAK;
+}
+
+
 static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
         if (!wsgi_req->socket->can_offload) {
                 uwsgi_log("[realtime] unable to use \"stream\" router without offloading\n");
@@ -118,6 +207,13 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
         }
         uwsgi_buffer_destroy(ub);
         return UWSGI_ROUTE_BREAK;
+}
+
+static int socketio_router(struct uwsgi_route *ur, char *args) {
+        ur->func = socketio_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+        return 0;
 }
 
 static int sse_router(struct uwsgi_route *ur, char *args) {
@@ -276,11 +372,119 @@ static int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsg
 		
 }
 
+/*
+	Here we publish binary blobs to redis.
+	Whenever a chunk is received it is published to a redis channel
+
+	status:
+                0 -> waiting for connection on fd (redis)
+                1 -> start waiting for read on s (client) and fd (redis)
+                2 -> publish received chunks (redis, write event)
+		3 -> waiting for redis ack
+*/
+/*
+static int realtime_redis_publish_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
+	ssize_t rlen;
+
+        // setup
+        if (fd == -1) {
+                event_queue_add_fd_write(ut->queue, uor->fd);
+                return 0;
+        }
+
+	switch(uor->status) {
+                // waiting for connection
+                case 0:
+                        if (fd == uor->fd) {
+                                uor->status = 1;
+                                // ok try to send the request right now...
+                                return realtime_redis_publish_offload_engine_do(ut, uor, fd);
+                        }
+                        return -1;
+		// read event from s or fd
+                case 1:
+                        if (fd == uor->s) {
+				// ensure ubuf is big enough
+				if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
+                                rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+                                if (rlen > 0) {
+                                        	uor->to_write = message_len;
+                                        	uor->pos = 0;
+                                        	uwsgi_offload_0r_1w(uor->fd, uor->s)
+                                        	uor->status = 3;
+				}
+				// 0 -> again -1 -> error
+                                return ret;
+                                if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_redis_offload_engine_do() -> read()/fd");
+                                }
+                        }
+			// unexpected redis response is considered an error
+                        return -1;
+		// write event on fd
+                case 2:
+			// publish the message
+			// *3\r\n$7\r\npublish\r\n$
+                        rlen = write(uor->s, uor->buf + uor->pos, uor->to_write);
+                        if (rlen > 0) {
+                                uor->to_write -= rlen;
+                                uor->pos += rlen;
+                                if (uor->to_write == 0) {
+                                        if (event_queue_fd_write_to_read(ut->queue, uor->s)) return -1;
+                                        if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
+                                        uor->status = 2;
+                                }
+                                return 0;
+                        }
+                        else if (rlen < 0) {
+                                uwsgi_offload_retry
+                                uwsgi_error("realtime_redis_publish_offload_engine_do() -> write()/s");
+                        }
+                        return -1;
+		case 3:
+			// ensure ubuf is big enough
+                        if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
+			rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+                        if (rlen > 0) {
+                        	uor->ubuf->pos += rlen;
+                                        // check if we have a full redis message
+                                        int64_t message_len = 0;
+                                        char *message;
+                                        ssize_t ret = urt_redis_parse(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
+                                        if (ret > 0) {
+						// must be successfull
+						if (type != ':') return -1;
+						// reset buffer
+						uor->ubuf->pos = 0;
+						uor->status = 1;
+                                                ret = 0;
+                                        }
+                                        // 0 -> again -1 -> error
+                                        return ret;
+                                }
+                                if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_redis_publish_offload_engine_do() -> read()/fd");
+                                }
+		default:
+                        break;
+        }
+
+        return -1;
+		
+}
+
+*/
+
+
 static void realtime_register() {
 	realtime_redis_offload_engine = uwsgi_offload_register_engine("realtime-redis", realtime_redis_offload_engine_prepare, realtime_redis_offload_engine_do);
 	uwsgi_register_router("sse", sse_router);
 	uwsgi_register_router("sseraw", sseraw_router);
 	uwsgi_register_router("stream", stream_router);
+	//uwsgi_register_router("istream", istream_router);
+	uwsgi_register_router("socket.io", socketio_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {
