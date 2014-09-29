@@ -174,7 +174,7 @@ static int socketio_router(struct uwsgi_route *ur, char *args) {
         ur->func = socketio_router_func;
         ur->data = args;
         ur->data_len = strlen(args);
-	ur->custom = 2;
+	ur->custom = REALTIME_SOCKETIO;
         return 0;
 }
 
@@ -182,6 +182,7 @@ static int sse_router(struct uwsgi_route *ur, char *args) {
 	ur->func = sse_router_func;
 	ur->data = args;
 	ur->data_len = strlen(args);
+	ur->custom = REALTIME_SSE;
 	return 0;
 }
 
@@ -189,7 +190,7 @@ static int sseraw_router(struct uwsgi_route *ur, char *args) {
         ur->func = sse_router_func;
         ur->data = args;
         ur->data_len = strlen(args);
-	ur->custom = 1;
+	ur->custom = REALTIME_RAW;
         return 0;
 }
 

@@ -84,13 +84,13 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 							if (uor->buf) free(uor->buf);
 							// what to do with the message ?
 							// buf_pos is used as the type (yes, it is ugly, sorry)
-							if (uor->buf_pos == 1) {
+							if (uor->buf_pos == REALTIME_SSE) {
 								uint64_t final_len = 0;
 								uor->buf = sse_build(message, message_len, &final_len);
 								if (!uor->buf) return -1;
 								message_len = final_len;
 							}
-							else if (uor->buf_pos == 2) {
+							else if (uor->buf_pos == REALTIME_SOCKETIO) {
 								struct uwsgi_buffer *tmp_ub = uwsgi_buffer_new(message_len);
 								if (uwsgi_buffer_append(tmp_ub, message, message_len)) {
 									uwsgi_buffer_destroy(tmp_ub);
@@ -126,7 +126,7 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                                 }
                         }
 			// in socket.io mode, data from client are consumed
-			else if (fd == uor->s && uor->buf_pos == 2) {
+			else if (fd == uor->s && uor->buf_pos == REALTIME_SOCKETIO) {
 				char buf[4096];
 				ssize_t rlen = read(uor->s, buf, 4096);
 				if (rlen <= 0) return -1;
