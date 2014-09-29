@@ -67,6 +67,18 @@ end:
 }
 
 static int socketio_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
+	if (!uwsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "POST", 4)) {
+		// sid ?
+		uint16_t sid_len = 0;
+		char *sid = uwsgi_get_qs(wsgi_req, "sid", 3, &sid_len);
+		if (!sid) return UWSGI_ROUTE_BREAK;
+		if (!eio_body_publish(wsgi_req)) {
+			if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end0;
+			uwsgi_response_write_body_do(wsgi_req, "ok", 2);
+		}	
+end0:
+		return UWSGI_ROUTE_BREAK;
+	}
 	// only GET requests are managed
 	if (uwsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "GET", 3)) {
 		return UWSGI_ROUTE_NEXT;

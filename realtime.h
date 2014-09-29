@@ -13,3 +13,6 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *, struct uwsgi_offload
 char *sse_build(char *, int64_t, uint64_t *);
 int eio_build(struct uwsgi_buffer *);
 int eio_build_http(struct uwsgi_buffer *);
+int eio_body_publish(struct wsgi_request *);
+
+int realtime_redis_publish(char *, size_t, char *, size_t);

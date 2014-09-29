@@ -1,5 +1,7 @@
 #include "realtime.h"
 
+extern struct uwsgi_server uwsgi;
+
 ssize_t urt_redis_num(char *buf, size_t len, int64_t *n) {
 	char *ptr = buf;
 	int is_negative = 0;
@@ -208,4 +210,36 @@ ssize_t urt_redis_pubsub(char *buf, size_t len, int64_t *n, char **str) {
 	}
 
 	return ptr - buf;
+}
+
+int realtime_redis_publish(char *buf, size_t len, char *channel, size_t channel_len) {
+	struct uwsgi_buffer *ub = uwsgi_buffer_new(uwsgi.page_size);
+	if (uwsgi_buffer_append(ub, "*3\r\n$7\r\nPUBLISH\r\n$", 18)) goto error;
+	if (uwsgi_buffer_num64(ub, channel_len)) goto error;
+	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
+	if (uwsgi_buffer_append(ub, channel, channel_len)) goto error;
+	if (uwsgi_buffer_append(ub, "\r\n$", 3)) goto error;
+	if (uwsgi_buffer_num64(ub, len)) goto error;
+	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
+	if (uwsgi_buffer_append(ub, buf, len)) goto error;
+	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
+
+	int fd = uwsgi_connect("127.0.0.1:6379", 0, 1);
+	if (fd < 0) goto error;
+
+	if (uwsgi.wait_write_hook(fd, uwsgi.socket_timeout) <= 0) {
+		close(fd);
+		goto error;
+	}
+
+	if (uwsgi_write_true_nb(fd, ub->buf, ub->pos, uwsgi.socket_timeout)) {
+		close(fd);
+		goto error;
+	}
+	close(fd);
+	uwsgi_buffer_destroy(ub);
+	return 0;
+error:
+	uwsgi_buffer_destroy(ub);
+	return -1;
 }
