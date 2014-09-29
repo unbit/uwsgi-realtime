@@ -2,6 +2,7 @@
 
 #define uwsgi_offload_retry if (uwsgi_is_again()) return 0;
 #define uwsgi_offload_0r_1w(x, y) if (event_queue_del_fd(ut->queue, x, event_queue_read())) return -1;\
+					if (event_queue_fd_read_to_write(ut->queue, y)) return -1;
 
 int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
 	if (!uor->name) {
@@ -89,6 +90,21 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 								if (!uor->buf) return -1;
 								message_len = final_len;
 							}
+							else if (uor->buf_pos == 2) {
+								struct uwsgi_buffer *tmp_ub = uwsgi_buffer_new(message_len);
+								if (uwsgi_buffer_append(tmp_ub, message, message_len)) {
+									uwsgi_buffer_destroy(tmp_ub);
+									return -1;
+								}
+                                                                if (eio_build_http(tmp_ub)) {
+									uwsgi_buffer_destroy(tmp_ub);
+                                                                        return -1;
+								}
+								uor->buf = tmp_ub->buf;
+								message_len = tmp_ub->pos;
+								tmp_ub->buf = NULL;
+								uwsgi_buffer_destroy(tmp_ub);	
+							}
 							else {
 								uor->buf = uwsgi_concat2n(message, message_len, "", 0);
 							}
@@ -98,6 +114,7 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                                         		uor->status = 3;
 						}
 						if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+						// again
 						ret = 0;
 					}
 					// 0 -> again -1 -> error
@@ -108,6 +125,14 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                                         uwsgi_error("realtime_redis_offload_engine_do() -> read()/fd");
                                 }
                         }
+			// in socket.io mode, data from client are consumed
+			else if (fd == uor->s && uor->buf_pos == 2) {
+				char buf[4096];
+				ssize_t rlen = read(uor->s, buf, 4096);
+				if (rlen <= 0) return -1;
+				// again
+				return 0;
+			}
 			// an event from the client can only mean disconneciton
                         return -1;
 		// write event on s

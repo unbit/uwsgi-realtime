@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<body>
+	<script src="https://cdn.socket.io/socket.io-1.1.0.js"></script>
+	<script>
+		var socket = io();
+		localStorage.debug='*';	
+		socket.on('helloworld', function(msg){
+			console.log('message');
+			document.body.innerHTML += msg;
+		});
+		socket.on('message', function(msg){
+			console.log('[message]');
+			document.body.innerHTML += msg;
+		});
+	</script>
+</body>
+</html>
