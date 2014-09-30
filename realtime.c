@@ -127,6 +127,17 @@ error:
 		goto end;
 	}
 
+	uint16_t transport_len = 0;
+	char *transport = uwsgi_get_qs(wsgi_req, "transport", 9, &transport_len);
+	if (transport && !uwsgi_strncmp(transport, transport_len, "websocket", 9)) {
+		if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) {
+			goto end;	
+		}
+		// send connection open
+		if (uwsgi_websocket_send(wsgi_req, "40", 2)) goto end;
+		goto offload;
+	}
+
 	// first send headers (if needed)
         if (!wsgi_req->headers_sent) {
         	if (!wsgi_req->headers_size) {
