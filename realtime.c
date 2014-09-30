@@ -23,6 +23,9 @@ static int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, 
 	uwsgi_offload_setup(realtime_redis_offload_engine, &uor, wsgi_req, 1);
         uor.name = "127.0.0.1:6379";
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
+	if (custom == REALTIME_WEBSOCKET) {
+		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
+	}
 	// set message builder (use buf_pos as storage)
 	uor.buf_pos = custom;
 	if (uwsgi_buffer_append(uor.ubuf, "*2\r\n$9\r\nSUBSCRIBE\r\n$", 20)) goto error;
@@ -96,6 +99,8 @@ end0:
         if (!ub) return UWSGI_ROUTE_BREAK;
 
 
+	int mode = ur->custom ;
+
 	// sid ?
 	uint16_t sid_len = 0;
 	char *sid = uwsgi_get_qs(wsgi_req, "sid", 3, &sid_len);
@@ -117,8 +122,11 @@ end0:
 			struct uwsgi_buffer *ubody = uwsgi_buffer_new(uwsgi.page_size);
 			if (uwsgi_buffer_append(ubody, "0{\"sid\":\"", 9)) goto error;
 			if (uwsgi_buffer_append(ubody, ub->buf, ub->pos)) goto error;
-			//if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[\"polling\"],\"pingTimeout\":90000}", 45)) goto error;
+#if UWSGI_PLUGIN_API > 1
+			if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[\"websocket\"],\"pingInterval\":60000,\"pingTimeout\":90000}", 68)) goto error;
+#else
 			if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[],\"pingInterval\":60000,\"pingTimeout\":90000}", 57)) goto error;
+#endif
 			if (eio_build(ubody)) goto error;
 			uwsgi_response_write_body_do(wsgi_req, ubody->buf, ubody->pos);
 error:
@@ -130,11 +138,14 @@ error:
 	uint16_t transport_len = 0;
 	char *transport = uwsgi_get_qs(wsgi_req, "transport", 9, &transport_len);
 	if (transport && !uwsgi_strncmp(transport, transport_len, "websocket", 9)) {
+		uwsgi_log("websocket handshake\n");
 		if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) {
 			goto end;	
 		}
+		uwsgi_log("ready to send\n");
 		// send connection open
 		if (uwsgi_websocket_send(wsgi_req, "40", 2)) goto end;
+		mode = REALTIME_WEBSOCKET;
 		goto offload;
 	}
 
@@ -163,7 +174,7 @@ error2:
 	}
 
 offload:
-        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
+        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, mode)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
         }
