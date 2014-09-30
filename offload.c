@@ -20,7 +20,8 @@ int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct 
 
 /*
 	Here we wait for messages on a redis channel.
-	Whenever a message is received it is forwarded as SSE
+	Whenever a message is received it is forwarded as SSE, websocket packet
+	or whatever you need
 
 	status:
                 0 -> waiting for connection on fd (redis)
@@ -125,13 +126,24 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                                         uwsgi_error("realtime_redis_offload_engine_do() -> read()/fd");
                                 }
                         }
-			// in socket.io mode, data from client are consumed
-			else if (fd == uor->s && uor->buf_pos == REALTIME_SOCKETIO) {
+			else if (fd == uor->s) {
 				char buf[4096];
-				ssize_t rlen = read(uor->s, buf, 4096);
-				if (rlen <= 0) return -1;
-				// again
-				return 0;
+				ssize_t rlen;
+				switch(uor->buf_pos) {
+					// in socket.io mode, data from client are consumed
+					case REALTIME_SOCKETIO:
+						rlen = read(uor->s, buf, 4096);
+						if (rlen <= 0) return -1;
+						// again
+						return 0;
+					// in websocket mode, read a packet and forward
+					// to redis
+					case REALTIME_WEBSOCKET:
+						break;
+					default:
+						break;
+				}
+				
 			}
 			// an event from the client can only mean disconneciton
                         return -1;

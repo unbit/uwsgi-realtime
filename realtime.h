@@ -3,6 +3,7 @@
 #define REALTIME_RAW 0
 #define REALTIME_SSE 1
 #define REALTIME_SOCKETIO 2
+#define REALTIME_WEBSOCKET 3
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
