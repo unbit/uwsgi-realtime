@@ -26,6 +26,7 @@ static int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, 
 	if (custom == REALTIME_WEBSOCKET) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
+		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 	// set message builder (use buf_pos as storage)
 	uor.buf_pos = custom;
