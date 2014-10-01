@@ -154,7 +154,27 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 			}
 			// data from redis (read into ubuf2, write to ubuf)
 			if (uor->fd == fd) {
-			
+				if (uwsgi_buffer_ensure(uor->ubuf2, 4096)) return -1;
+                                ssize_t rlen = read(uor->s, uor->ubuf2->buf + uor->ubuf2->pos, 4096);
+                                if (rlen <= 0) return -1;
+                                uor->ubuf2->pos += rlen;
+                                char *message = NULL;
+                                int64_t message_len = 0;
+				ssize_t ret = urt_redis_pubsub(uor->ubuf2->buf, uor->ubuf2->pos, &message_len, &message);			
+				if (ret > 0) {
+                                        // reset buffer
+                                        uor->ubuf->pos = 0;
+                                        if (uwsgi_buffer_append(uor->ubuf, message, message_len)) return -1;
+                                        if (uwsgi_buffer_decapitate(uor->ubuf2, rlen)) return -1;
+                                        // now publish the message to redis
+                                        uor->written = 0;
+                                        uor->status = 6;
+                                        if (event_queue_del_fd(ut->queue, uor->fd2, event_queue_read())) return -1;
+                                        if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
+                                        if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+                                        return 0;
+                                }
+                                return ret;
 			}
 			// data from publish channel (consume, end on error)
 			if (uor->fd2 == fd) {
@@ -195,10 +215,9 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                                 uor->ubuf->pos = 0;
                                                 // back to wait
                                                 uor->status = 4;
-						if (event_queue_del_fd(ut->queue, uor->fd2, event_queue_write())) return -1;
-                                                if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
-                                                if (event_queue_add_fd_read(ut->queue, uor->fd2)) return -1;
+						if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
                                                 if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
+                                                if (event_queue_fd_write_to_read(ut->queue, uor->fd2)) return -1;
                                         }
                                         return 0;
                                 }
