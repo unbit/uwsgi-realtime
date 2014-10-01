@@ -25,6 +25,7 @@ static int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, 
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
 	if (custom == REALTIME_WEBSOCKET) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
+		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 	// set message builder (use buf_pos as storage)
 	uor.buf_pos = custom;
@@ -196,7 +197,7 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
         struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
         if (!ub) return UWSGI_ROUTE_BREAK;
 
-        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, 0)) {
+        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
         }
@@ -235,6 +236,14 @@ static int stream_router(struct uwsgi_route *ur, char *args) {
         return 0;
 }
 
+static int websocket_router(struct uwsgi_route *ur, char *args) {
+        ur->func = stream_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+	ur->custom = REALTIME_WEBSOCKET;
+        return 0;
+}
+
 static void realtime_register() {
 	realtime_redis_offload_engine = uwsgi_offload_register_engine("realtime-redis", realtime_redis_offload_engine_prepare, realtime_redis_offload_engine_do);
 	uwsgi_register_router("sse", sse_router);
@@ -242,6 +251,7 @@ static void realtime_register() {
 	uwsgi_register_router("stream", stream_router);
 	//uwsgi_register_router("istream", istream_router);
 	uwsgi_register_router("socket.io", socketio_router);
+	uwsgi_register_router("websocket", websocket_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {
