@@ -113,7 +113,8 @@ end0:
 				if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
                        		if (uwsgi_response_add_content_type(wsgi_req, "application/octet-stream", 24)) goto end;
                        		if (uwsgi_response_add_header(wsgi_req, "Access-Control-Allow-Origin", 27, "*", 1)) goto end;
-                       		if (uwsgi_response_add_header(wsgi_req, "Connection", 10, "Keep-Alive", 10)) goto end;
+				// the first output is not keepalive'd
+                       		if (uwsgi_response_add_header(wsgi_req, "Connection", 10, "close", 5)) goto end;
 			}
 			if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;	
 		}
