@@ -57,7 +57,7 @@ int realtime_websocket_build(struct uwsgi_buffer *ub, int binary) {
 /*
 	- offload engine for socket.io websocket
 
-	options -> subscribe=<subscribe_channel>,publish=<publish_channel>,sid=<sid>,prefix=<prfix_to_add_to_each_message>
+	options -> subscribe=<subscribe_channel>,publish=<publish_channel>,sid=<sid>,prefix=<prefix_to_add_to_each_message>,binary=0/1
 
 	fd -> connection for subscription
 	fd2 -> connection for publish 
@@ -165,6 +165,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                         // reset buffer
                                         uor->ubuf->pos = 0;
                                         if (uwsgi_buffer_append(uor->ubuf, message, message_len)) return -1;
+					if (realtime_websocket_build(uor->ubuf, 0)) return -1;
                                         if (uwsgi_buffer_decapitate(uor->ubuf2, rlen)) return -1;
                                         // now publish the message to redis
                                         uor->written = 0;
