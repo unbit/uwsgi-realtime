@@ -50,8 +50,8 @@ ssize_t realtime_websocket_parse(struct uwsgi_buffer *ub, uint8_t *opcode, char 
 	return needed + pktsize;
 }
 
-int realtime_websocket_build(struct uwsgi_buffer *ub, uint8_t opcode, char *msg, uint64_t len, int binary) {
-	if (uwsgi_buffer_u8(ub, opcode)) return -1;
+int realtime_websocket_build(struct uwsgi_buffer *ub, uint8_t opcode, char *msg, uint64_t len) {
+	if (uwsgi_buffer_u8(ub, 0x80 | opcode)) return -1;
 	if (len < 126) {
                 if (uwsgi_buffer_u8(ub, len)) return -1;
         }
@@ -191,7 +191,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 					if (message_len > 0) {
                                         	// reset buffer
                                         	uor->ubuf->pos = 0;
-						if (realtime_websocket_build(uor->ubuf, 1, message, message_len, 0)) return -1;
+						if (realtime_websocket_build(uor->ubuf, 1, message, message_len)) return -1;
                                         	// now publish the message to redis
                                         	uor->written = 0;
                                         	uor->status = 5;

@@ -144,8 +144,6 @@ error:
 		if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) {
 			goto end;	
 		}
-		// send connection open
-		if (uwsgi_websocket_send(wsgi_req, "40", 2)) goto end;
 		mode = REALTIME_WEBSOCKET;
 		goto offload;
 	}
