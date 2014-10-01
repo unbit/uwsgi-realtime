@@ -140,11 +140,9 @@ error:
 	uint16_t transport_len = 0;
 	char *transport = uwsgi_get_qs(wsgi_req, "transport", 9, &transport_len);
 	if (transport && !uwsgi_strncmp(transport, transport_len, "websocket", 9)) {
-		uwsgi_log("websocket handshake\n");
 		if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) {
 			goto end;	
 		}
-		uwsgi_log("ready to send\n");
 		// send connection open
 		if (uwsgi_websocket_send(wsgi_req, "40", 2)) goto end;
 		mode = REALTIME_WEBSOCKET;

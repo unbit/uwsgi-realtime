@@ -73,11 +73,8 @@ int realtime_websocket_build(struct uwsgi_buffer *ub, int binary) {
 	status 5 -> publishing to fd2
 */
 int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
-	// setup
-        if (fd == -1) {
-                event_queue_add_fd_write(ut->queue, uor->fd);
-                return 0;
-        }
+
+	uwsgi_log("ENTERING WEBSOCKET %d\n", uor->status);
 
         switch(uor->status) {
                 // waiting for fd connection
@@ -92,6 +89,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 		case 1:
 			if (fd == uor->fd) {
                                 ssize_t rlen = write(uor->fd, uor->ubuf->buf + uor->written, uor->ubuf->pos-uor->written);
+				uwsgi_log("written %d\n", rlen);
                                 if (rlen > 0) {
                                         uor->written += rlen;
                                         if (uor->written >= (size_t)uor->ubuf->pos) {
@@ -99,6 +97,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                                 uor->ubuf->pos = 0;
                                                 uor->status = 2;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_write())) return -1;
+						return realtime_redis_offload_engine_do(ut, uor, fd);
                                         }
                                         return 0;
                                 }
@@ -108,13 +107,12 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                 }
                         }
                         return -1;
-			break;
 		case 2:
 			// connected to fd2, now start waiting for data
 			uor->fd2 = uwsgi_connect(uor->name, 0, 1);
 			if (uor->fd2 < 0) return -1;
 			uor->status = 3;
-			event_queue_add_fd_write(ut->queue, uor->fd);
+			event_queue_add_fd_write(ut->queue, uor->fd2);
 			return 0;
 		case 3:
 			if (uor->fd2 == fd) {
@@ -130,7 +128,11 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 			if (uor->s == fd) {
 				if (uwsgi_buffer_ensure(uor->ubuf1, 4096)) return -1;
                                 ssize_t rlen = read(uor->s, uor->ubuf1->buf + uor->ubuf1->pos, 4096);
-                                if (rlen <= 0) return -1;
+                                if (rlen <= 0) {
+					uwsgi_offload_retry
+                                        uwsgi_error("realtime_websocket_offload_do() -> write()");
+					return -1;
+				}
                                 uor->ubuf1->pos += rlen;
                                 char *message = NULL;
                                 uint64_t message_len = 0;
@@ -155,24 +157,31 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 			// data from redis (read into ubuf2, write to ubuf)
 			if (uor->fd == fd) {
 				if (uwsgi_buffer_ensure(uor->ubuf2, 4096)) return -1;
-                                ssize_t rlen = read(uor->s, uor->ubuf2->buf + uor->ubuf2->pos, 4096);
-                                if (rlen <= 0) return -1;
+                                ssize_t rlen = read(uor->fd, uor->ubuf2->buf + uor->ubuf2->pos, 4096);
+                                if (rlen <= 0) {
+					uwsgi_offload_retry
+                                        uwsgi_error("realtime_websocket_offload_do() -> read()");
+					return -1;
+				}
                                 uor->ubuf2->pos += rlen;
                                 char *message = NULL;
                                 int64_t message_len = 0;
 				ssize_t ret = urt_redis_pubsub(uor->ubuf2->buf, uor->ubuf2->pos, &message_len, &message);			
 				if (ret > 0) {
-                                        // reset buffer
-                                        uor->ubuf->pos = 0;
-                                        if (uwsgi_buffer_append(uor->ubuf, message, message_len)) return -1;
-					if (realtime_websocket_build(uor->ubuf, 0)) return -1;
+					uwsgi_log("redis message |%.*s|\n", message_len, message);
+					if (message_len > 0) {
+                                        	// reset buffer
+                                        	uor->ubuf->pos = 0;
+                                        	if (uwsgi_buffer_append(uor->ubuf, message, message_len)) return -1;
+						if (realtime_websocket_build(uor->ubuf, 0)) return -1;
+                                        	// now publish the message to redis
+                                        	uor->written = 0;
+                                        	uor->status = 6;
+                                        	if (event_queue_del_fd(ut->queue, uor->fd2, event_queue_read())) return -1;
+                                        	if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
+                                        	if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+					}
                                         if (uwsgi_buffer_decapitate(uor->ubuf2, rlen)) return -1;
-                                        // now publish the message to redis
-                                        uor->written = 0;
-                                        uor->status = 6;
-                                        if (event_queue_del_fd(ut->queue, uor->fd2, event_queue_read())) return -1;
-                                        if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
-                                        if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
                                         return 0;
                                 }
                                 return ret;
@@ -200,7 +209,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                 }
                                 else if (rlen < 0) {
                                         uwsgi_offload_retry
-                                        uwsgi_error("realtime_redis_offload_engine_do() -> write()");
+                                        uwsgi_error("realtime_websocket_offload_do() -> write()");
                                 }
                         }
 			return -1;
@@ -224,7 +233,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                                 }
                                 else if (rlen < 0) {
                                         uwsgi_offload_retry
-                                        uwsgi_error("realtime_redis_offload_engine_do() -> write()");
+                                        uwsgi_error("realtime_websocket_offload_do() -> write()");
                                 }
                         }
                         return -1;
