@@ -34,6 +34,10 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                 return 0;
         }
 
+	if (uor->buf_pos == REALTIME_WEBSOCKET) {
+		return realtime_websocket_offload_do(ut, uor, fd);
+	}
+
 	switch(uor->status) {
                 // waiting for connection
                 case 0:
@@ -135,23 +139,6 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 						return 0;
 					// in websocket mode, read a packet and forward
 					// to redis
-					case REALTIME_WEBSOCKET:
-						if (uwsgi_buffer_ensure(uor->ubuf1, 4096)) return -1;
-						rlen = read(uor->s, uor->ubuf1->buf + uor->ubuf1->pos, 4096);
-                                                if (rlen <= 0) return -1;
-						uor->ubuf1->pos += rlen;
-						char *message = NULL;
-						uint64_t message_len = 0;
-						uint8_t opcode = 0;
-						ssize_t ret = realtime_websocket_parse(uor->ubuf1, &opcode, &message, &message_len);
-						if (ret > 0) {
-							uwsgi_log("websocket message of %d bytes (%d %.*s)!!!\n", rlen, opcode, message_len, message);
-							if (uwsgi_buffer_decapitate(uor->ubuf1, rlen)) return -1;
-							// now publish the message to redis
-							return 0;
-						}
-                                                // again
-						break;
 					default:
 						break;
 				}

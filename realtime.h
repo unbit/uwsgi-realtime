@@ -22,3 +22,5 @@ int realtime_redis_publish(char *, size_t, char *, size_t);
 int realtime_redis_build_publish(struct uwsgi_buffer *, char *, size_t, char *, size_t);
 
 ssize_t realtime_websocket_parse(struct uwsgi_buffer *, uint8_t *, char **, uint64_t *);
+
+int realtime_websocket_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
