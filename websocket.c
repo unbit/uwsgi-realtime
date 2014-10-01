@@ -128,13 +128,38 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
 		case 4:
 			// data from socket, data from redis (read into ubuf1, write to ubuf)
 			if (uor->s == fd) {
+				if (uwsgi_buffer_ensure(uor->ubuf1, 4096)) return -1;
+                                ssize_t rlen = read(uor->s, uor->ubuf1->buf + uor->ubuf1->pos, 4096);
+                                if (rlen <= 0) return -1;
+                                uor->ubuf1->pos += rlen;
+                                char *message = NULL;
+                                uint64_t message_len = 0;
+                                uint8_t opcode = 0;
+                                ssize_t ret = realtime_websocket_parse(uor->ubuf1, &opcode, &message, &message_len);
+                                if (ret > 0) {
+                                	uwsgi_log("websocket message of %d bytes (%d %.*s)!!!\n", rlen, opcode, message_len, message);
+					// reset buffer
+					uor->ubuf->pos = 0;
+					if (realtime_redis_build_publish(uor->ubuf, message, message_len, "uwsgi", 5)) return -1;
+                                        if (uwsgi_buffer_decapitate(uor->ubuf1, rlen)) return -1;
+                                        // now publish the message to redis
+					uor->written = 0;
+					uor->status = 6;
+					if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
+                                	if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
+                                	if (event_queue_fd_read_to_write(ut->queue, uor->fd2)) return -1;
+                                        return 0;
+                                }
+				return ret;
 			}
 			// data from redis (read into ubuf2, write to ubuf)
 			if (uor->fd == fd) {
+			
 			}
 			// data from publish channel (consume, end on error)
 			if (uor->fd2 == fd) {
 			}
+			return -1;
 		case 5:
 			// write received message to the socket
 			if (fd == uor->s) {

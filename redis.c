@@ -212,17 +212,22 @@ ssize_t urt_redis_pubsub(char *buf, size_t len, int64_t *n, char **str) {
 	return ptr - buf;
 }
 
+int realtime_redis_build_publish(struct uwsgi_buffer *ub, char *buf, size_t len, char *channel, size_t channel_len) {
+	if (uwsgi_buffer_append(ub, "*3\r\n$7\r\nPUBLISH\r\n$", 18)) return -1;
+	if (uwsgi_buffer_num64(ub, channel_len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+        if (uwsgi_buffer_append(ub, channel, channel_len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n$", 3)) return -1;
+        if (uwsgi_buffer_num64(ub, len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+        if (uwsgi_buffer_append(ub, buf, len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+	return 0;
+}
+
 int realtime_redis_publish(char *buf, size_t len, char *channel, size_t channel_len) {
 	struct uwsgi_buffer *ub = uwsgi_buffer_new(uwsgi.page_size);
-	if (uwsgi_buffer_append(ub, "*3\r\n$7\r\nPUBLISH\r\n$", 18)) goto error;
-	if (uwsgi_buffer_num64(ub, channel_len)) goto error;
-	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
-	if (uwsgi_buffer_append(ub, channel, channel_len)) goto error;
-	if (uwsgi_buffer_append(ub, "\r\n$", 3)) goto error;
-	if (uwsgi_buffer_num64(ub, len)) goto error;
-	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
-	if (uwsgi_buffer_append(ub, buf, len)) goto error;
-	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
+	if (realtime_redis_build_publish(ub, buf, len, channel, channel_len)) goto error;	
 
 	int fd = uwsgi_connect("127.0.0.1:6379", 0, 1);
 	if (fd < 0) goto error;

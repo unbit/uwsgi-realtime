@@ -19,5 +19,6 @@ int eio_build_http(struct uwsgi_buffer *);
 int eio_body_publish(struct wsgi_request *);
 
 int realtime_redis_publish(char *, size_t, char *, size_t);
+int realtime_redis_build_publish(struct uwsgi_buffer *, char *, size_t, char *, size_t);
 
 ssize_t realtime_websocket_parse(struct uwsgi_buffer *, uint8_t *, char **, uint64_t *);
