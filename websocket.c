@@ -66,7 +66,8 @@ int realtime_websocket_build(struct uwsgi_buffer *ub, int binary) {
 	status 0 -> waiting for fd to be opened
 	status 1 -> subscribe to fd
 	status 2 -> connect to fd2
-	status 3 -> waiting data on s,fd,fd2
+	status 3 -> wait for fd2 connection
+	status 4 -> waiting data on s,fd,fd2
 
 	status 4 -> writing to s
 	status 5 -> publishing to fd2
@@ -89,18 +90,99 @@ int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_
                         return -1;
 		// on full write, connect to fd2
 		case 1:
+			if (fd == uor->fd) {
+                                ssize_t rlen = write(uor->fd, uor->ubuf->buf + uor->written, uor->ubuf->pos-uor->written);
+                                if (rlen > 0) {
+                                        uor->written += rlen;
+                                        if (uor->written >= (size_t)uor->ubuf->pos) {
+                                                // reset buffer
+                                                uor->ubuf->pos = 0;
+                                                uor->status = 2;
+						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_write())) return -1;
+                                        }
+                                        return 0;
+                                }
+                                else if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_redis_offload_engine_do() -> write()");
+                                }
+                        }
+                        return -1;
 			break;
 		case 2:
 			// connected to fd2, now start waiting for data
-			break;
+			uor->fd2 = uwsgi_connect(uor->name, 0, 1);
+			if (uor->fd2 < 0) return -1;
+			uor->status = 3;
+			event_queue_add_fd_write(ut->queue, uor->fd);
+			return 0;
 		case 3:
-			break;
+			if (uor->fd2 == fd) {
+                        	if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
+                        	if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
+                        	if (event_queue_fd_write_to_read(ut->queue, uor->fd2)) return -1;
+				uor->status = 4;
+				return 0;
+			}
+			return -1;
 		case 4:
-			// write received message to the socket
-			break;
+			// data from socket, data from redis (read into ubuf1, write to ubuf)
+			if (uor->s == fd) {
+			}
+			// data from redis (read into ubuf2, write to ubuf)
+			if (uor->fd == fd) {
+			}
+			// data from publish channel (consume, end on error)
+			if (uor->fd2 == fd) {
+			}
 		case 5:
+			// write received message to the socket
+			if (fd == uor->s) {
+                                ssize_t rlen = write(uor->s, uor->ubuf->buf + uor->written, uor->ubuf->pos-uor->written);
+                                if (rlen > 0) {
+                                        uor->written += rlen;
+                                        if (uor->written >= (size_t)uor->ubuf->pos) {
+                                                // reset buffer
+                                                uor->ubuf->pos = 0;
+						// back to wait
+                                                uor->status = 4;
+                                                if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
+                                                if (event_queue_add_fd_read(ut->queue, uor->fd2)) return -1;
+						if (event_queue_fd_write_to_read(ut->queue, uor->s)) return -1;
+                                        }
+                                        return 0;
+                                }
+                                else if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_redis_offload_engine_do() -> write()");
+                                }
+                        }
+			return -1;
+		case 6:
 			// publish message to redis
-			break;
+			// write received message to the socket
+                        if (fd == uor->fd2) {
+                                ssize_t rlen = write(uor->fd2, uor->ubuf->buf + uor->written, uor->ubuf->pos-uor->written);
+                                if (rlen > 0) {
+                                        uor->written += rlen;
+                                        if (uor->written >= (size_t)uor->ubuf->pos) {
+                                                // reset buffer
+                                                uor->ubuf->pos = 0;
+                                                // back to wait
+                                                uor->status = 4;
+						if (event_queue_del_fd(ut->queue, uor->fd2, event_queue_write())) return -1;
+                                                if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
+                                                if (event_queue_add_fd_read(ut->queue, uor->fd2)) return -1;
+                                                if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
+                                        }
+                                        return 0;
+                                }
+                                else if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_redis_offload_engine_do() -> write()");
+                                }
+                        }
+                        return -1;
 		default:
 			return -1;
 	}

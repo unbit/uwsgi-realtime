@@ -1,9 +1,5 @@
 #include "realtime.h"
 
-#define uwsgi_offload_retry if (uwsgi_is_again()) return 0;
-#define uwsgi_offload_0r_1w(x, y) if (event_queue_del_fd(ut->queue, x, event_queue_read())) return -1;\
-					if (event_queue_fd_read_to_write(ut->queue, y)) return -1;
-
 int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
 	if (!uor->name) {
                 return -1;
@@ -111,7 +107,8 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 							}
                                         		uor->to_write = message_len;
                                         		uor->pos = 0;
-                                        		uwsgi_offload_0r_1w(uor->fd, uor->s)
+							if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;\
+                                        		if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
                                         		uor->status = 3;
 						}
 						if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;

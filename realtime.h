@@ -1,5 +1,7 @@
 #include <uwsgi.h>
 
+#define uwsgi_offload_retry if (uwsgi_is_again()) return 0;
+
 #define REALTIME_RAW 0
 #define REALTIME_SSE 1
 #define REALTIME_SOCKETIO 2
