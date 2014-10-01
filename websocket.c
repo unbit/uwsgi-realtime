@@ -53,3 +53,56 @@ ssize_t realtime_websocket_parse(struct uwsgi_buffer *ub, uint8_t *opcode, char 
 int realtime_websocket_build(struct uwsgi_buffer *ub, int binary) {
 	return -1;
 }
+
+/*
+	- offload engine for socket.io websocket
+
+	options -> subscribe=<subscribe_channel>,publish=<publish_channel>,sid=<sid>,prefix=<prfix_to_add_to_each_message>
+
+	fd -> connection for subscription
+	fd2 -> connection for publish 
+	s -> websocket connection
+
+	status 0 -> waiting for fd to be opened
+	status 1 -> subscribe to fd
+	status 2 -> connect to fd2
+	status 3 -> waiting data on s,fd,fd2
+
+	status 4 -> writing to s
+	status 5 -> publishing to fd2
+*/
+int realtime_websocket_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
+	// setup
+        if (fd == -1) {
+                event_queue_add_fd_write(ut->queue, uor->fd);
+                return 0;
+        }
+
+        switch(uor->status) {
+                // waiting for fd connection
+                case 0:
+                        if (fd == uor->fd) {
+                                uor->status = 1;
+                                // ok try to send the request right now...
+                                return realtime_redis_offload_engine_do(ut, uor, fd);
+                        }
+                        return -1;
+		// on full write, connect to fd2
+		case 1:
+			break;
+		case 2:
+			// connected to fd2, now start waiting for data
+			break;
+		case 3:
+			break;
+		case 4:
+			// write received message to the socket
+			break;
+		case 5:
+			// publish message to redis
+			break;
+		default:
+			return -1;
+	}
+	return -1;
+}
