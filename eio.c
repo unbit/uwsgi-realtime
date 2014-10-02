@@ -103,3 +103,114 @@ error:
 	uwsgi_buffer_destroy(ub);
 	return -1;
 }
+
+int socketio_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
+        if (!uwsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "POST", 4)) {
+                // sid ?
+                uint16_t sid_len = 0;
+                char *sid = uwsgi_get_qs(wsgi_req, "sid", 3, &sid_len);
+                if (!sid) return UWSGI_ROUTE_BREAK;
+                if (!eio_body_publish(wsgi_req)) {
+                        if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end0;
+                        uwsgi_response_write_body_do(wsgi_req, "ok", 2);
+                }
+end0:
+                return UWSGI_ROUTE_BREAK;
+        }
+        // only GET requests are managed
+        if (uwsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "GET", 3)) {
+                return UWSGI_ROUTE_NEXT;
+        }
+
+        if (!wsgi_req->socket->can_offload) {
+                uwsgi_log("[realtime] unable to use \"socketio\" router without offloading\n");
+                return UWSGI_ROUTE_BREAK;
+        }
+
+        char **subject = (char **) (((char *)(wsgi_req))+ur->subject);
+        uint16_t *subject_len = (uint16_t *)  (((char *)(wsgi_req))+ur->subject_len);
+
+        struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
+        if (!ub) return UWSGI_ROUTE_BREAK;
+
+
+        int mode = ur->custom ;
+
+        // sid ?
+        uint16_t sid_len = 0;
+        char *sid = uwsgi_get_qs(wsgi_req, "sid", 3, &sid_len);
+        // HANDSHAKE ???
+        if (!sid) {
+                // first send headers (if needed)
+                if (!wsgi_req->headers_sent) {
+                        if (!wsgi_req->headers_size) {
+                                if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
+                                if (uwsgi_response_add_content_type(wsgi_req, "application/octet-stream", 24)) goto end;
+                                if (uwsgi_response_add_header(wsgi_req, "Access-Control-Allow-Origin", 27, "*", 1)) goto end;
+                                // the first output is not keepalive'd
+                                if (uwsgi_response_add_header(wsgi_req, "Connection", 10, "close", 5)) goto end;
+                        }
+                        if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+                }
+                // if no body has been sent, let's generate the json
+                // {"sid":"SID","upgrades":["polling"],"pingTimeout":30000}
+                if (wsgi_req->response_size == 0) {
+                        struct uwsgi_buffer *ubody = uwsgi_buffer_new(uwsgi.page_size);
+                        if (uwsgi_buffer_append(ubody, "0{\"sid\":\"", 9)) goto error;
+                        if (uwsgi_buffer_append(ubody, ub->buf, ub->pos)) goto error;
+#if UWSGI_PLUGIN_API > 1
+                        if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[\"websocket\"],\"pingInterval\":60000,\"pingTimeout\":90000}", 68)) goto error;
+#else
+                        if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[],\"pingInterval\":60000,\"pingTimeout\":90000}", 57)) goto error;
+#endif
+                        if (eio_build(ubody)) goto error;
+                        uwsgi_response_write_body_do(wsgi_req, ubody->buf, ubody->pos);
+error:
+                        uwsgi_buffer_destroy(ubody);
+                }
+                goto end;
+        }
+
+	uint16_t transport_len = 0;
+        char *transport = uwsgi_get_qs(wsgi_req, "transport", 9, &transport_len);
+        if (transport && !uwsgi_strncmp(transport, transport_len, "websocket", 9)) {
+                if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) {
+                        goto end;
+                }
+                mode = REALTIME_WEBSOCKET;
+                goto offload;
+        }
+
+        // first send headers (if needed)
+        if (!wsgi_req->headers_sent) {
+                if (!wsgi_req->headers_size) {
+                        if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
+                        if (uwsgi_response_add_content_type(wsgi_req, "application/octet-stream", 24)) goto end;
+                        if (uwsgi_response_add_header(wsgi_req, "Access-Control-Allow-Origin", 27, "*", 1)) goto end;
+                        if (uwsgi_response_add_header(wsgi_req, "Connection", 10, "Keep-Alive", 10)) goto end;
+                        if (uwsgi_response_add_content_length(wsgi_req, 5)) goto end;
+                }
+                if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+        }
+
+        if (wsgi_req->response_size == 0) {
+                struct uwsgi_buffer *ubody = uwsgi_buffer_new(uwsgi.page_size);
+                if (uwsgi_buffer_append(ubody, "40", 2)) goto error2;
+                if (eio_build(ubody)) goto error2;
+                uwsgi_response_write_body_do(wsgi_req, ubody->buf, ubody->pos);
+                uwsgi_buffer_destroy(ubody);
+                goto offload;
+error2:
+                uwsgi_buffer_destroy(ubody);
+                goto end;
+        }
+
+offload:
+        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, mode)) {
+                wsgi_req->via = UWSGI_VIA_OFFLOAD;
+                wsgi_req->status = 202;
+        }
+end:
+        uwsgi_buffer_destroy(ub);
+        return UWSGI_ROUTE_BREAK;
+}

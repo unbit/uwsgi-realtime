@@ -24,3 +24,7 @@ int realtime_redis_build_publish(struct uwsgi_buffer *, char *, size_t, char *, 
 ssize_t realtime_websocket_parse(struct uwsgi_buffer *, uint8_t *, char **, uint64_t *);
 
 int realtime_websocket_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int socketio_router_func(struct wsgi_request *, struct uwsgi_route *);
+
+int realtime_redis_offload(struct wsgi_request *, char *, uint16_t, uint64_t);
