@@ -7,9 +7,10 @@
 
 		sse -> start streaming SSE messages
 		sseraw -> start streaming SSE messages as-is
-		stream -> blindly send everything sent by the message dispatcher
 		socket.io -> stream socket.io/engine.io messages in polling or websocket mode
+		stream -> blindly send everything sent by the message dispatcher
 		istream -> blindly stream whatever sent by the client to the message dispatcher
+		websocket -> send received websockets packet to message dispatcher, send received messagess from the message diaptcher to the client as websocket packets
 */
 
 extern struct uwsgi_server uwsgi;
@@ -119,6 +120,15 @@ static int stream_router(struct uwsgi_route *ur, char *args) {
         ur->func = stream_router_func;
         ur->data = args;
         ur->data_len = strlen(args);
+	ur->custom = REALTIME_RAW;
+        return 0;
+}
+
+static int istream_router(struct uwsgi_route *ur, char *args) {
+        ur->func = stream_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+	ur->custom = REALTIME_ISTREAM;
         return 0;
 }
 
@@ -135,7 +145,7 @@ static void realtime_register() {
 	uwsgi_register_router("sse", sse_router);
 	uwsgi_register_router("sseraw", sseraw_router);
 	uwsgi_register_router("stream", stream_router);
-	//uwsgi_register_router("istream", istream_router);
+	uwsgi_register_router("istream", istream_router);
 	uwsgi_register_router("socket.io", socketio_router);
 	uwsgi_register_router("websocket", websocket_router);
 }

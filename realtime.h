@@ -6,6 +6,7 @@
 #define REALTIME_SSE 1
 #define REALTIME_SOCKETIO 2
 #define REALTIME_WEBSOCKET 3
+#define REALTIME_ISTREAM 5
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
@@ -28,3 +29,4 @@ int realtime_websocket_offload_do(struct uwsgi_thread *, struct uwsgi_offload_re
 int socketio_router_func(struct wsgi_request *, struct uwsgi_route *);
 
 int realtime_redis_offload(struct wsgi_request *, char *, uint16_t, uint64_t);
+int realtime_istream_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
