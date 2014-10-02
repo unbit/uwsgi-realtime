@@ -42,6 +42,7 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 		return realtime_istream_offload_do(ut, uor, fd);
 	}
 
+	// raw
 	switch(uor->status) {
                 // waiting for connection
                 case 0:
@@ -131,23 +132,6 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
                                         uwsgi_error("realtime_redis_offload_engine_do() -> read()/fd");
                                 }
                         }
-			else if (fd == uor->s) {
-				char buf[4096];
-				ssize_t rlen;
-				switch(uor->buf_pos) {
-					// in socket.io mode, data from client are consumed
-					case REALTIME_SOCKETIO:
-						rlen = read(uor->s, buf, 4096);
-						if (rlen <= 0) return -1;
-						// again
-						return 0;
-					// in websocket mode, read a packet and forward
-					// to redis
-					default:
-						break;
-				}
-				
-			}
 			// an event from the client can only mean disconneciton
                         return -1;
 		// write event on s
