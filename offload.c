@@ -42,6 +42,10 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 		return realtime_istream_offload_do(ut, uor, fd);
 	}
 
+	if (uor->buf_pos == REALTIME_SSE) {
+		return realtime_sse_offload_do(ut, uor, fd);
+	}
+
 	// raw
 	switch(uor->status) {
                 // waiting for connection
