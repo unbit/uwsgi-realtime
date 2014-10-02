@@ -31,3 +31,6 @@ int socketio_router_func(struct wsgi_request *, struct uwsgi_route *);
 int realtime_redis_offload(struct wsgi_request *, char *, uint16_t, uint64_t);
 int realtime_istream_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 int realtime_sse_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *);
+int realtime_subscribe_ubuf(struct uwsgi_thread *ut, struct uwsgi_offload_request *, int);

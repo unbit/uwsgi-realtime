@@ -44,25 +44,7 @@ int realtime_sse_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reques
                         return -1;
 		// writing the SUBSCRIBE request
 		case 1:
-                        if (fd == uor->fd) {
-                                rlen = write(uor->fd, uor->ubuf->buf + uor->written, uor->ubuf->pos-uor->written);
-                                if (rlen > 0) {
-                                        uor->written += rlen;
-                                        if (uor->written >= (size_t)uor->ubuf->pos) {
-						// reset buffer
-						uor->ubuf->pos = 0;
-                                                uor->status = 2;
-                                                if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
-                                                if (event_queue_fd_write_to_read(ut->queue, uor->fd)) return -1;
-                                        }
-                                        return 0;
-                                }
-                                else if (rlen < 0) {
-                                        uwsgi_offload_retry
-                                        uwsgi_error("realtime_sse_offload_do() -> write()");
-                                }
-                        }
-                        return -1;
+			return realtime_subscribe_ubuf(ut, uor, fd);
 		// read event from s or fd
                 case 2:
                         if (fd == uor->fd) {
@@ -106,23 +88,7 @@ int realtime_sse_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reques
                         return -1;
 		// write event on s
                 case 3:
-			// forward the message to the client
-                        rlen = write(uor->s, uor->buf + uor->pos, uor->to_write);
-                        if (rlen > 0) {
-                                uor->to_write -= rlen;
-                                uor->pos += rlen;
-                                if (uor->to_write == 0) {
-                                        if (event_queue_fd_write_to_read(ut->queue, uor->s)) return -1;
-                                        if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
-                                        uor->status = 2;
-                                }
-                                return 0;
-                        }
-                        else if (rlen < 0) {
-                                uwsgi_offload_retry
-                                uwsgi_error("realtime_sse_offload_do() -> write()/s");
-                        }
-                        return -1;
+			return realtime_write_buf(ut, uor);
 		default:
                         break;
         }
