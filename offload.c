@@ -44,6 +44,10 @@ int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *uo
 	return -1;
 }
 
+int realtime_upload_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
+        return 0;
+}
+
 int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
 	if (!uor->name) {
 		return -1;
@@ -56,6 +60,30 @@ int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct 
 	}
 
 	return 0;
+}
+
+/*
+	status 0 -> wait for input data
+*/
+int realtime_upload_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
+	// setup
+        if (fd == -1) {
+                event_queue_add_fd_read(ut->queue, uor->s);
+                return 0;
+        }
+
+	if (fd != uor->s) return -1;
+
+	ssize_t rlen = read(uor->s, uor->buf, uor->buf_pos);
+	if (rlen > 0) {
+		ssize_t wlen = write(uor->fd, uor->buf, rlen);
+		if (wlen != rlen) return -1;
+		return 0;
+	}
+	if (rlen < 0) {
+		uwsgi_offload_retry uwsgi_error("realtime_upload_offload_engine_do() -> read()/s");
+	}
+	return -1;
 }
 
 /*
