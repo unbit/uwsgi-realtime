@@ -63,8 +63,10 @@ int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct 
 }
 
 /*
-	status 0 -> wait for input data
+	status 0 -> wait for input data, and write to file
+	status 1 -> write HTTP response
 */
+#define HTTP_UPLOAD_RESPONSE "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 2\r\n\r\nOK"
 int realtime_upload_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
 	// setup
         if (fd == -1) {
@@ -74,15 +76,39 @@ int realtime_upload_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offl
 
 	if (fd != uor->s) return -1;
 
-	ssize_t rlen = read(uor->s, uor->buf, uor->buf_pos);
-	if (rlen > 0) {
-		ssize_t wlen = write(uor->fd, uor->buf, rlen);
-		if (wlen != rlen) return -1;
-		return 0;
+	if (uor->status == 0) {
+		ssize_t rlen = read(uor->s, uor->buf, UMIN((size_t)uor->buf_pos, uor->to_write));
+		if (rlen > 0) {
+			uor->to_write -= rlen;
+			ssize_t wlen = write(uor->fd, uor->buf, rlen);
+			if (wlen != rlen) return -1;
+			if (uor->to_write == 0) {
+				if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+				uor->status = 1;
+				uor->to_write = sizeof(HTTP_UPLOAD_RESPONSE) -1;
+				uor->pos = 0;
+				memcpy(uor->buf, HTTP_UPLOAD_RESPONSE, sizeof(HTTP_UPLOAD_RESPONSE) -1);
+				return 0;
+			}
+			return 0;
+		}
+		if (rlen < 0) {
+			uwsgi_offload_retry uwsgi_error("realtime_upload_offload_engine_do() -> read()/s");
+		}
 	}
-	if (rlen < 0) {
-		uwsgi_offload_retry uwsgi_error("realtime_upload_offload_engine_do() -> read()/s");
+	else if (uor->status == 1) {
+		ssize_t wlen = write(uor->s, uor->buf + uor->pos, uor->to_write - uor->pos);
+		if (wlen > 0) {
+			uor->pos += wlen;
+			if ((size_t)uor->pos >= uor->to_write) {
+				return -1;
+			}
+		}
+		if (wlen < 0) {
+			uwsgi_offload_retry uwsgi_error("realtime_upload_offload_engine_do() -> write()/s");
+		}
 	}
+
 	return -1;
 }
 

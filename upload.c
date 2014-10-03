@@ -2,11 +2,13 @@
 
 extern struct uwsgi_offload_engine *realtime_upload_offload_engine;
 
-int realtime_upload_offload(struct wsgi_request *wsgi_req, int fd, off_t buf_size) {
+int realtime_upload_offload(struct wsgi_request *wsgi_req, int fd, int buf_size, off_t content_length) {
         struct uwsgi_offload_request uor;
         uwsgi_offload_setup(realtime_upload_offload_engine, &uor, wsgi_req, 1);
 	uor.buf = uwsgi_malloc(buf_size);
 	uor.buf_pos = buf_size;
+	uor.to_write = content_length;
+	uor.fd = fd;
         return uwsgi_offload_run(wsgi_req, &uor, NULL);
 }
 
@@ -15,6 +17,11 @@ int upload_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                 uwsgi_log("[realtime] unable to use \"upload\" router without offloading\n");
                 return UWSGI_ROUTE_BREAK;
         }
+
+	if (wsgi_req->post_cl == 0) {
+		uwsgi_log("[realtime] unable to use \"upload\" router without a Content-Length header\n");
+                return UWSGI_ROUTE_BREAK;
+	}	
 
         char **subject = (char **) (((char *)(wsgi_req))+ur->subject);
         uint16_t *subject_len = (uint16_t *)  (((char *)(wsgi_req))+ur->subject_len);
@@ -37,7 +44,7 @@ int upload_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	else {
 	}
 
-        if (!realtime_upload_offload(wsgi_req, fd, buf_size)) {
+        if (!realtime_upload_offload(wsgi_req, fd, buf_size, wsgi_req->post_cl)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
         }
