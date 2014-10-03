@@ -11,6 +11,7 @@
 		stream -> blindly send everything sent by the message dispatcher
 		istream -> blindly stream whatever sent by the client to the message dispatcher
 		websocket -> send received websockets packet to message dispatcher, send received messagess from the message diaptcher to the client as websocket packets
+		upload -> store the request input to a file
 */
 
 extern struct uwsgi_server uwsgi;
