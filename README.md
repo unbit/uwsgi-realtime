@@ -95,6 +95,9 @@ More SSE
 Socket.io and Engine.io
 =======================
 
+HTML5 uploads
+=============
+
 Streaming
 =========
 
