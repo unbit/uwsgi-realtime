@@ -214,3 +214,30 @@ end:
         uwsgi_buffer_destroy(ub);
         return UWSGI_ROUTE_BREAK;
 }
+
+/*
+
+ssize_t ret = urt_redis_pubsub(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
+                                if (ret > 0) {
+                                        if (message_len > 0) {
+                                                if (uor->buf)
+                                                        free(uor->buf);
+                                                else if (uor->buf_pos == REALTIME_SOCKETIO) {
+                                                        struct uwsgi_buffer *tmp_ub = uwsgi_buffer_new(message_len);
+                                                        if (uwsgi_buffer_append(tmp_ub, message, message_len)) {
+                                                                uwsgi_buffer_destroy(tmp_ub);
+                                                                return -1;
+                                                        }
+                                                        if (eio_build_http(tmp_ub)) {
+                                                                uwsgi_buffer_destroy(tmp_ub);
+                                                                return -1;
+                                                        }
+                                                        uor->buf = tmp_ub->buf;
+                                                        message_len = tmp_ub->pos;
+                                                        tmp_ub->buf = NULL;
+                                                        uwsgi_buffer_destroy(tmp_ub);
+                                                }
+                                                else {
+
+
+*/

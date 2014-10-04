@@ -174,24 +174,7 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 					if (message_len > 0) {
 						if (uor->buf)
 							free(uor->buf);
-						else if (uor->buf_pos == REALTIME_SOCKETIO) {
-							struct uwsgi_buffer *tmp_ub = uwsgi_buffer_new(message_len);
-							if (uwsgi_buffer_append(tmp_ub, message, message_len)) {
-								uwsgi_buffer_destroy(tmp_ub);
-								return -1;
-							}
-							if (eio_build_http(tmp_ub)) {
-								uwsgi_buffer_destroy(tmp_ub);
-								return -1;
-							}
-							uor->buf = tmp_ub->buf;
-							message_len = tmp_ub->pos;
-							tmp_ub->buf = NULL;
-							uwsgi_buffer_destroy(tmp_ub);
-						}
-						else {
-							uor->buf = uwsgi_concat2n(message, message_len, "", 0);
-						}
+						uor->buf = uwsgi_concat2n(message, message_len, "", 0);
 						uor->to_write = message_len;
 						uor->pos = 0;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))

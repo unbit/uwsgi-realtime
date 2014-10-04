@@ -21,7 +21,7 @@ int realtime_istream_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_re
                 case 0:
                         if (fd == uor->fd) {
                                 uor->status = 1;
-				if (event_queue_del_fd(ut->queue, uor->fd, event_queue_write())) return -1;
+				if (event_queue_fd_write_to_read(ut->queue, uor->fd)) return -1;
 				if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
                                 return 0;
                         }
@@ -57,9 +57,10 @@ int realtime_istream_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_re
                                         return -1;
                                 }
                                 uor->ubuf->pos += rlen;
-                                char *message = NULL;
-                                int64_t message_len = 0;
-                                ssize_t ret = urt_redis_pubsub(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
+				char array_type;
+				char *array;
+				int64_t array_len;
+                                ssize_t ret = urt_redis_parse(uor->ubuf->buf, uor->ubuf->pos, &array_type, &array_len, &array);
                                 if (ret > 0) {
                                         if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
                                         return 0;
