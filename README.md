@@ -109,5 +109,8 @@ Why limiting to text messages ? The redis pubsub system can carry binary data to
 Building an icecast2 compatible server
 ======================================
 
+Supported actions
+=================
+
 Notes
 =====
