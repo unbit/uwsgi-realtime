@@ -95,6 +95,9 @@ More SSE
 Socket.io and Engine.io
 =======================
 
+Raw Websockets
+==============
+
 HTML5 uploads
 =============
 
