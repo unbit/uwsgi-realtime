@@ -7,6 +7,7 @@ int realtime_interleaved_offload(struct wsgi_request *wsgi_req, char *rtp_socket
         uwsgi_offload_setup(realtime_interleaved_offload_engine, &uor, wsgi_req, 1);
         uor.fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (uor.fd < 0) return -1;
+	uwsgi_socket_nb(uor.fd);
 	char *colon = strchr(rtp_socket, ':');
 	if (!colon) {
 		close(uor.fd);
@@ -15,6 +16,7 @@ int realtime_interleaved_offload(struct wsgi_request *wsgi_req, char *rtp_socket
 	*colon = 0;
         uor.buf = uwsgi_malloc(sizeof(struct sockaddr_in));
 	socket_to_in_addr(rtp_socket, colon, 0, (struct sockaddr_in *)uor.buf);
+	uor.ubuf = uwsgi_buffer_new(4096);
         return uwsgi_offload_run(wsgi_req, &uor, NULL);
 }
 
@@ -225,7 +227,7 @@ int realtime_interleaved_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi
 
                                 // data from publish channel (consume, end on error)
                                 if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
-                                ssize_t rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+                                ssize_t rlen = read(uor->s, uor->ubuf->buf + uor->ubuf->pos, 4096);
                                 if (rlen == 0) return -1;
                                 if (rlen < 0) {
                                         uwsgi_offload_retry
@@ -234,12 +236,17 @@ int realtime_interleaved_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi
                                 }
                                 uor->ubuf->pos += rlen;
 				uint8_t channel = 0;
-                                char *rtp;
+                                char *rtp = NULL;
                                 size_t rtp_len = 0;
                                 ssize_t ret = realtime_interleaved_parse(uor->ubuf, &channel, &rtp, &rtp_len);
                                 if (ret > 0) {
-					uwsgi_log("RTP size %d\n", rtp_len);
-                                        if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+					ssize_t wlen = sendto(uor->fd, rtp, rtp_len, 0, (struct sockaddr *) uor->buf, sizeof(struct sockaddr_in));
+					if (wlen != (ssize_t)rtp_len) {
+						if (wlen < 0 && uwsgi_is_again()) return 0;
+						uwsgi_error("realtime_interleaved_offload_engine_do()/sendto()");
+						return -1;
+					}
+                                       	if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
                                         return 0;
                                 }
                                 return ret;
