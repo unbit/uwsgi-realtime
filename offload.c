@@ -48,6 +48,10 @@ int realtime_upload_offload_engine_prepare(struct wsgi_request *wsgi_req, struct
         return 0;
 }
 
+int realtime_interleaved_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
+        return 0;
+}
+
 int realtime_redis_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
 	if (!uor->name) {
 		return -1;

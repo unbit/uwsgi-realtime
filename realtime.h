@@ -8,6 +8,7 @@
 #define REALTIME_WEBSOCKET 3
 #define REALTIME_ISTREAM 5
 #define REALTIME_UPLOAD 6
+#define REALTIME_INTERLEAVED 7
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
@@ -40,3 +41,8 @@ int upload_router_func(struct wsgi_request *, struct uwsgi_route *);
 int realtime_upload_offload_engine_prepare(struct wsgi_request *, struct uwsgi_offload_request *);
 
 int realtime_upload_offload_engine_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int interleaved_router_func(struct wsgi_request *, struct uwsgi_route *);
+int realtime_interleaved_offload_engine_prepare(struct wsgi_request *, struct uwsgi_offload_request *);
+
+int realtime_interleaved_offload_engine_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

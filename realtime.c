@@ -18,6 +18,7 @@ extern struct uwsgi_server uwsgi;
 
 struct uwsgi_offload_engine *realtime_redis_offload_engine;
 struct uwsgi_offload_engine *realtime_upload_offload_engine;
+struct uwsgi_offload_engine *realtime_interleaved_offload_engine;
 
 int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, uint16_t channel_len, uint64_t custom) {
 	struct uwsgi_offload_request uor;
@@ -142,6 +143,14 @@ static int istream_router(struct uwsgi_route *ur, char *args) {
         return 0;
 }
 
+static int interleaved_router(struct uwsgi_route *ur, char *args) {
+        ur->func = interleaved_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+	ur->custom = REALTIME_INTERLEAVED;
+        return 0;
+}
+
 static int websocket_router(struct uwsgi_route *ur, char *args) {
         ur->func = stream_router_func;
         ur->data = args;
@@ -160,10 +169,12 @@ static int upload_router(struct uwsgi_route *ur, char *args) {
 static void realtime_register() {
 	realtime_redis_offload_engine = uwsgi_offload_register_engine("realtime-redis", realtime_redis_offload_engine_prepare, realtime_redis_offload_engine_do);
 	realtime_upload_offload_engine = uwsgi_offload_register_engine("realtime-upload", realtime_upload_offload_engine_prepare, realtime_upload_offload_engine_do);
+	realtime_interleaved_offload_engine = uwsgi_offload_register_engine("realtime-interleaved", realtime_interleaved_offload_engine_prepare, realtime_interleaved_offload_engine_do);
 	uwsgi_register_router("sse", sse_router);
 	uwsgi_register_router("sseraw", sseraw_router);
 	uwsgi_register_router("stream", stream_router);
 	uwsgi_register_router("istream", istream_router);
+	uwsgi_register_router("interleaved", interleaved_router);
 	uwsgi_register_router("socket.io", socketio_router);
 	uwsgi_register_router("websocket", websocket_router);
 	uwsgi_register_router("upload", upload_router);
