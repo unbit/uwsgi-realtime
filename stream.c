@@ -8,15 +8,32 @@ int realtime_interleaved_offload(struct wsgi_request *wsgi_req, char *rtp_socket
         uor.fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (uor.fd < 0) return -1;
 	uwsgi_socket_nb(uor.fd);
-	char *colon = strchr(rtp_socket, ':');
-	if (!colon) {
+	size_t argc = 0;
+	char **argv = uwsgi_split_quoted(rtp_socket, strlen(rtp_socket), ";", &argc);
+	if (!argv || argc == 0) {
 		close(uor.fd);
 		return -1;
 	}
-	*colon = 0;
-        uor.buf = uwsgi_malloc(sizeof(struct sockaddr_in));
-	socket_to_in_addr(rtp_socket, colon, 0, (struct sockaddr_in *)uor.buf);
+	uor.buf = uwsgi_malloc(sizeof(struct sockaddr_in) * argc);
+	size_t i;
+	for(i=0;i<argc;i++) {
+		char *colon = strchr(argv[i], ':');
+		if (!colon) {
+			close(uor.fd);
+			size_t j;
+			for(j=i;j<argc;j++) free(argv[j]);
+			free(argv);
+			return -1;
+		}
+		*colon = 0;
+		struct sockaddr_in *sin = (struct sockaddr_in *)uor.buf;
+		socket_to_in_addr(argv[i], colon, 0, &sin[i]);
+		free(argv[i]);
+	}
+	free(argv);
 	uor.ubuf = uwsgi_buffer_new(4096);
+	// how many channels ?
+	uor.buf_pos = argc;
         return uwsgi_offload_run(wsgi_req, &uor, NULL);
 }
 
@@ -240,12 +257,20 @@ int realtime_interleaved_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi
                                 size_t rtp_len = 0;
                                 ssize_t ret = realtime_interleaved_parse(uor->ubuf, &channel, &rtp, &rtp_len);
                                 if (ret > 0) {
-					ssize_t wlen = sendto(uor->fd, rtp, rtp_len, 0, (struct sockaddr *) uor->buf, sizeof(struct sockaddr_in));
+					struct sockaddr_in *sin = (struct sockaddr_in *) uor->buf;
+					if (channel > 0) {
+						// even ?
+						if (channel % 2 != 0) goto skip;
+						channel = channel/2;
+						if (channel >= uor->buf_pos) goto skip;
+					}
+					ssize_t wlen = sendto(uor->fd, rtp, rtp_len, 0, (struct sockaddr *) &sin[channel], sizeof(struct sockaddr_in));
 					if (wlen != (ssize_t)rtp_len) {
 						if (wlen < 0 && uwsgi_is_again()) return 0;
 						uwsgi_error("realtime_interleaved_offload_engine_do()/sendto()");
 						return -1;
 					}
+skip:
                                        	if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
                                         return 0;
                                 }
