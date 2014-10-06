@@ -9,6 +9,7 @@
 #define REALTIME_ISTREAM 5
 #define REALTIME_UPLOAD 6
 #define REALTIME_INTERLEAVED 7
+#define REALTIME_CHUNKED 8
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
