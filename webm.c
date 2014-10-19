@@ -27,10 +27,6 @@ extern struct uwsgi_server uwsgi;
 
 */
 
-int realtime_webm_8bit(struct uwsgi_buffer *ub, uint8_t n) {
-	return uwsgi_buffer_u8(ub, n | 0x80);
-}
-
 int realtime_webm_64bit(struct uwsgi_buffer *ub, uint64_t n) {
 	if (uwsgi_buffer_u64be(ub, n)) return -1;
 	ub->buf[ub->pos-8] = 0x01;
@@ -156,6 +152,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                 if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=',
                         "server", &rc->server,
                         "subscribe", &rc->subscribe,
+                        "video_codec", &rc->video_codec,
                         NULL)) {
                         uwsgi_log("[realtime] unable to parse webm action\n");
                         realtime_destroy_config(rc);
@@ -164,8 +161,8 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                 }
         }
         else {
-                rc->server = uwsgi_str("127.0.0.1:6379");
                 rc->subscribe = uwsgi_str(ub->buf);
+		rc->video_codec = uwsgi_str("V_VP8");	
         }
 
         if (!wsgi_req->headers_sent) {
@@ -183,7 +180,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	// leave space for tracks size
 	webm->pos += 8;
 
-	if (realtime_webm_track_video(webm, 1, "V_VP8", 30, 320, 240)) {
+	if (realtime_webm_track_video(webm, 1, rc->video_codec, 30, 320, 240)) {
 		uwsgi_buffer_destroy(webm);
 		goto end;
 	}

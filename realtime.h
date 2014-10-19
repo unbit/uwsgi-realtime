@@ -18,6 +18,8 @@ struct realtime_config {
 	char *server;
 
 	char *publish;
+	size_t publish_len;
+
 	char *subscribe;
 
 	char *sid;
