@@ -133,6 +133,7 @@ end0:
         struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
         if (!ub) return UWSGI_ROUTE_BREAK;
 
+	struct realtime_config *rc = uwsgi_calloc(sizeof(struct realtime_config));
 
         int mode = ur->custom ;
 
@@ -206,11 +207,14 @@ error2:
         }
 
 offload:
-        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, mode)) {
+	rc->engine = mode;
+        if (!realtime_redis_offload(wsgi_req, rc)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
+		rc = NULL;
         }
 end:
+	if (rc) realtime_destroy_config(rc);
         uwsgi_buffer_destroy(ub);
         return UWSGI_ROUTE_BREAK;
 }

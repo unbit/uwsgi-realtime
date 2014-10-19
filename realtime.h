@@ -13,10 +13,18 @@
 #define REALTIME_RTMPT 9
 
 struct realtime_config {
+	uint8_t engine;
+
+	char *server;
+
 	char *publish;
 	char *subscribe;
 
 	char *sid;
+
+	char *src;
+	char *dst;
+	char *tmp;
 
 	uint8_t fps;
 
@@ -30,6 +38,8 @@ struct realtime_config {
 	uint8_t audio_channels;
 	uint16_t audio_freq;
 };
+
+void realtime_destroy_config(struct realtime_config *);
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
@@ -51,7 +61,7 @@ int realtime_websocket_offload_do(struct uwsgi_thread *, struct uwsgi_offload_re
 
 int socketio_router_func(struct wsgi_request *, struct uwsgi_route *);
 
-int realtime_redis_offload(struct wsgi_request *, char *, uint16_t, uint64_t);
+int realtime_redis_offload(struct wsgi_request *, struct realtime_config *);
 int realtime_istream_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 int realtime_istream_chunked_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 int realtime_sse_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

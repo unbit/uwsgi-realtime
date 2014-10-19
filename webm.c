@@ -150,6 +150,24 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
         struct uwsgi_buffer *ub = uwsgi_routing_translate(wsgi_req, ur, *subject, *subject_len, ur->data, ur->data_len);
         if (!ub) return UWSGI_ROUTE_BREAK;
 
+	struct realtime_config *rc = uwsgi_calloc(sizeof(struct realtime_config));
+
+	if (strchr(ub->buf, '=')) {
+                if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=',
+                        "server", &rc->server,
+                        "subscribe", &rc->subscribe,
+                        NULL)) {
+                        uwsgi_log("[realtime] unable to parse webm action\n");
+                        realtime_destroy_config(rc);
+                        uwsgi_buffer_destroy(ub);
+                        return UWSGI_ROUTE_BREAK;
+                }
+        }
+        else {
+                rc->server = uwsgi_str("127.0.0.1:6379");
+                rc->subscribe = uwsgi_str(ub->buf);
+        }
+
         if (!wsgi_req->headers_sent) {
                 if (!wsgi_req->headers_size) {
                         if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
@@ -173,7 +191,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	// now fix the tracks size
 	size_t current_pos = webm->pos;
 	webm->pos = tracks_pos;
-        if (realtime_webm_64bit(webm, (current_pos - tracks_pos)-8)) return -1;
+        if (realtime_webm_64bit(webm, (current_pos - tracks_pos)-8)) goto end;
         webm->pos = current_pos;
 
 	if (uwsgi_response_write_body_do(wsgi_req, webm->buf, webm->pos)) {
@@ -183,11 +201,14 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 
 	uwsgi_buffer_destroy(webm);
 
-        if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
+        if (!realtime_redis_offload(wsgi_req, rc)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
+		rc = NULL;
         }
+
 end:
+	if (rc) realtime_destroy_config(rc);
         uwsgi_buffer_destroy(ub);
         return UWSGI_ROUTE_BREAK;
 }
