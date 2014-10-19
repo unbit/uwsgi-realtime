@@ -13,6 +13,7 @@
 		websocket -> send received websockets packet to message dispatcher, send received messagess from the message diaptcher to the client as websocket packets
 		upload -> store the request input to a file
 		streamchunked -> blindly stream whatever sent by the client (in chunked encoding) to the message dispatcher
+		webm -> send valid webm header and then start broadcasting video chunks from the message dispatcher
 */
 
 extern struct uwsgi_server uwsgi;
