@@ -9,7 +9,7 @@
 #define REALTIME_ISTREAM 5
 #define REALTIME_UPLOAD 6
 #define REALTIME_INTERLEAVED 7
-#define REALTIME_CHUNKED 8
+#define REALTIME_ISTREAM_CHUNKED 8
 #define REALTIME_RTMPT 9
 
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
@@ -34,6 +34,7 @@ int socketio_router_func(struct wsgi_request *, struct uwsgi_route *);
 
 int realtime_redis_offload(struct wsgi_request *, char *, uint16_t, uint64_t);
 int realtime_istream_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+int realtime_istream_chunked_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 int realtime_sse_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 
 int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *);

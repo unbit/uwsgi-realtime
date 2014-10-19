@@ -9,10 +9,9 @@
 		sseraw -> start streaming SSE messages as-is
 		socket.io -> stream socket.io/engine.io messages in polling or websocket mode
 		stream -> blindly send everything sent by the message dispatcher
-		istream -> blindly stream whatever sent by the client to the message dispatcher
+		istream -> blindly stream whatever sent by the client to the message dispatcher (supports chunked input)
 		websocket -> send received websockets packet to message dispatcher, send received messagess from the message diaptcher to the client as websocket packets
 		upload -> store the request input to a file
-		streamchunked -> blindly stream whatever sent by the client (in chunked encoding) to the message dispatcher
 		webm -> send valid webm header and then start broadcasting video chunks from the message dispatcher
 */
 
@@ -33,6 +32,21 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, char *channel, uint16_
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
+	}
+	// TODO this should be applied to plain ISTREAM too
+	if (custom == REALTIME_ISTREAM_CHUNKED) {
+		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
+		// 1 MB limit by default
+		uor.ubuf1->limit = 1024 * 1024 * 1024;
+        	// append remaining body...
+        	if (wsgi_req->proto_parser_remains > 0) {
+                	if (uwsgi_buffer_append(uor.ubuf1, wsgi_req->proto_parser_remains_buf, wsgi_req->proto_parser_remains)) {
+                        	uwsgi_buffer_destroy(uor.ubuf1);
+				goto error;
+			}
+                	wsgi_req->post_pos += wsgi_req->proto_parser_remains;
+                	wsgi_req->proto_parser_remains = 0;
+        	}
 	}
 	// set message builder (use buf_pos as storage)
 	uor.buf_pos = custom;
@@ -94,6 +108,17 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
 			if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;			
 		}
 		if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+	}
+
+	// do we need chunked encoding ?
+	if (ur->custom == REALTIME_ISTREAM) {
+		uint16_t transfer_encoding_len = 0;
+		char *transfer_encoding = uwsgi_get_var(wsgi_req, "HTTP_TRANSFER_ENCODING", 22, &transfer_encoding_len);
+		if (transfer_encoding) {
+			if (!uwsgi_strncmp(transfer_encoding, transfer_encoding_len, "chunked", 7)) {
+				ur->custom = REALTIME_ISTREAM_CHUNKED;
+			}
+		} 
 	}
 
         if (!realtime_redis_offload(wsgi_req, ub->buf, ub->pos, ur->custom)) {
