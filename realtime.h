@@ -12,6 +12,25 @@
 #define REALTIME_ISTREAM_CHUNKED 8
 #define REALTIME_RTMPT 9
 
+struct realtime_config {
+	char *publish;
+	char *subscribe;
+
+	char *sid;
+
+	uint8_t fps;
+
+	char *video_codec;
+	uint8_t video_id;
+	uint16_t width;
+	uint16_t height;
+
+	char *audio_codec;
+	uint8_t audio_id;
+	uint8_t audio_channels;
+	uint16_t audio_freq;
+};
+
 ssize_t urt_redis_pubsub(char *, size_t, int64_t *, char **);
 ssize_t urt_redis_parse(char *, size_t, char *, int64_t *, char **);
 
