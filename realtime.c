@@ -48,6 +48,9 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	if (rc->publish) {
 		rc->publish_len = strlen(rc->publish);
 	}
+	if (rc->prefix) {
+		rc->prefix_len = strlen(rc->prefix);
+	}
         uor.name = rc->server;
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
 	if (rc->engine == REALTIME_WEBSOCKET) {

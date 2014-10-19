@@ -24,6 +24,9 @@ struct realtime_config {
 
 	char *sid;
 
+	char *prefix;
+	size_t prefix_len;
+
 	char *src;
 	char *dst;
 	char *tmp;
