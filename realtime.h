@@ -48,3 +48,5 @@ int interleaved_router_func(struct wsgi_request *, struct uwsgi_route *);
 int realtime_interleaved_offload_engine_prepare(struct wsgi_request *, struct uwsgi_offload_request *);
 
 int realtime_interleaved_offload_engine_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int webm_router_func(struct wsgi_request *, struct uwsgi_route *);

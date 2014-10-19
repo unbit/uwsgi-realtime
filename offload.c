@@ -17,7 +17,7 @@ int realtime_subscribe_ubuf(struct uwsgi_thread *ut, struct uwsgi_offload_reques
 			return 0;
 		}
 		else if (rlen < 0) {
-			uwsgi_offload_retry uwsgi_error("realtime_sse_offload_do() -> write()");
+			uwsgi_offload_retry uwsgi_error("realtime_subscribe_ubuf() -> write()");
 		}
 	}
 	return -1;

@@ -137,6 +137,14 @@ static int stream_router(struct uwsgi_route *ur, char *args) {
         return 0;
 }
 
+static int webm_router(struct uwsgi_route *ur, char *args) {
+        ur->func = webm_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+        ur->custom = REALTIME_RAW;
+        return 0;
+}
+
 static int istream_router(struct uwsgi_route *ur, char *args) {
         ur->func = stream_router_func;
         ur->data = args;
@@ -180,6 +188,7 @@ static void realtime_register() {
 	uwsgi_register_router("socket.io", socketio_router);
 	uwsgi_register_router("websocket", websocket_router);
 	uwsgi_register_router("upload", upload_router);
+	uwsgi_register_router("webm", webm_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {
