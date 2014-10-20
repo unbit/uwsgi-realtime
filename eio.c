@@ -161,11 +161,7 @@ end0:
                         struct uwsgi_buffer *ubody = uwsgi_buffer_new(uwsgi.page_size);
                         if (uwsgi_buffer_append(ubody, "0{\"sid\":\"", 9)) goto error;
                         if (uwsgi_buffer_append(ubody, ub->buf, ub->pos)) goto error;
-#if UWSGI_PLUGIN_API > 1
                         if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[\"websocket\"],\"pingInterval\":60000,\"pingTimeout\":90000}", 68)) goto error;
-#else
-                        if (uwsgi_buffer_append(ubody, "\",\"upgrades\":[],\"pingInterval\":60000,\"pingTimeout\":90000}", 57)) goto error;
-#endif
                         if (eio_build(ubody)) goto error;
                         uwsgi_response_write_body_do(wsgi_req, ubody->buf, ubody->pos);
 error:
