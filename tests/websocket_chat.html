@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<body>
+	<script>
+		var ws;
+		function chat_join() {
+			var value = document.getElementById('username').value;	
+			if (value == '') {
+				alert("empty name !!!");
+				return;
+			}
+			ws = new WebSocket('ws://' + window.location.hostname + ':' + window.location.port + '/websocket?name=' + value);
+			ws.onopen = function() {
+				document.getElementById('publisher').style.visibility = "visible";
+				ws.onmessage = function(evt) {
+					document.getElementById('messages').innerHTML += unescape(evt.data) + '<br/>';
+				};
+			};
+		}
+
+		function chat_send() {
+			var value = document.getElementById('message').value;  
+			if (value != '') {
+				ws.send(value);
+				document.getElementById('message').value = '';
+			}
+		}
+	</script>
+
+	<input type="text" id="username"/> <button onClick="chat_join();">join</button>
+	<br/><br/>
+	<div id="messages" style="border:solid 1px green;width: 800px; height: 300px;overflow: auto">
+	</div>
+	<div id="publisher" style="visibility:hidden">
+		<br/>(you are connected) send a message:
+		<input type="text" id="message"><button onClick="chat_send()">send</button>
+	</div>	
+</body>
+</html>

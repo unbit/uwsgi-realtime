@@ -71,7 +71,9 @@ int eio_parse_and_publish(struct uwsgi_buffer *ub, char *hb) {
 	// more data ?
 	if (len < pos+2+pktlen) return 0;
 
-	if (realtime_redis_publish(buf + pos+2, pktlen, "uwsgi", 5)) return -1;
+	// TODO fix here
+	struct realtime_config *rc = NULL;
+	if (realtime_redis_publish(rc, buf + pos+2, pktlen)) return -1;
 
 	// decapitate buffer
 

@@ -175,6 +175,8 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
                         "server", &rc->server,
                         "subscribe", &rc->subscribe,
                         "publish", &rc->publish,
+                        "suffix", &rc->suffix,
+                        "prefix", &rc->prefix,
                         NULL)) {
                         uwsgi_log("[realtime] unable to parse stream action\n");
                         realtime_destroy_config(rc);
@@ -187,10 +189,15 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
         }
 
 	if (!wsgi_req->headers_sent) {
-                if (!wsgi_req->headers_size) {
-			if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;			
+		if (ur->custom == REALTIME_WEBSOCKET) {
+			if (uwsgi_websocket_handshake(wsgi_req, NULL, 0, NULL, 0, NULL, 0)) goto end;
 		}
-		if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+		else {
+                	if (!wsgi_req->headers_size) {
+				if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;			
+			}
+			if (uwsgi_response_write_headers_do(wsgi_req) < 0) goto end;
+		}
 	}
 
 	// do we need chunked encoding ?

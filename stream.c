@@ -143,6 +143,8 @@ int realtime_istream_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_re
 	// TODO make this buffer configurable
 	char buf[8192];
 
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+
         switch(uor->status) {
                 // waiting for fd connection
                 case 0:
@@ -161,7 +163,7 @@ int realtime_istream_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_re
 					uor->status = 2;
 					uor->ubuf->pos = 0;
 					uor->written = 0;
-					if (realtime_redis_build_publish(uor->ubuf, buf, rlen, "uwsgi", 5)) return -1;
+					if (realtime_redis_build_publish(uor->ubuf, buf, rlen, rc)) return -1;
 					if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
 					if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
                                         return 0;

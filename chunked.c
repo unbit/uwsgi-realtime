@@ -77,7 +77,7 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *ut, struct uwsgi_of
                                         uor->status = 2;
                                         uor->ubuf->pos = 0;
                                         uor->written = 0;
-                                        if (realtime_redis_build_publish(uor->ubuf, chunk, chunk_len, rc->publish, rc->publish_len)) return -1;
+                                        if (realtime_redis_build_publish(uor->ubuf, chunk, chunk_len, rc)) return -1;
 					if (uwsgi_buffer_decapitate(uor->ubuf1, chunked_rlen)) return -1;
                                         if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
                                         if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
