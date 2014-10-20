@@ -124,7 +124,7 @@ On a macosx system you can send webm/vp8 video frames using:
 ffmpeg -f avfoundation -i "0" -s 320x240 -r 30 -g 1 -b:v 1M http://address:port/stream.webm
 ```
 
-(the -g parameter is the 'group of pictures', setting it to 1 ensure the video will be suddenly playable, increasing it will reduce data size but could result in pretty high delay. Try to experiment with the best values)
+(the -g parameter is the 'group of pictures', setting it to 1 ensure the video will be suddenly playable, increasing it will reduce data size but could result in pretty high delay. Try to experiment for the best value, but generally anything lower than 4 should be supported flawlessly)
 
 The "istream" offload engine will detect the chunked input and will parse it generating a redis message for each chunk. Those chunks are fully valid webm clusters/blocks so you can stream the "as-is" to the client (you  only need to prepend them with the generic webm header, see below).
 
