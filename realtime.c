@@ -25,6 +25,9 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->server) free(rc->server);
 	if (rc->publish) free(rc->publish);
 	if (rc->subscribe) free(rc->subscribe);
+	if (rc->prefix) free(rc->prefix);
+	if (rc->suffix) free(rc->suffix);
+	if (rc->boundary) free(rc->boundary);
 	if (rc->buffer_size_str) free(rc->buffer_size_str);
 	if (rc->sid) free(rc->sid);
 	if (rc->src) free(rc->src);
@@ -52,6 +55,12 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	if (rc->prefix) {
 		rc->prefix_len = strlen(rc->prefix);
 	}
+	if (rc->suffix) {
+		rc->suffix_len = strlen(rc->suffix);
+	}
+	if (rc->boundary) {
+		rc->boundary_len = strlen(rc->boundary);
+	}
 	if (rc->buffer_size_str) {
 		rc->buffer_size = atoi(rc->buffer_size_str);
 	}
@@ -65,6 +74,9 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
+	}
+	else if (rc->engine == REALTIME_MJPEG) {
+		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 	// TODO this should be applied to plain ISTREAM too
 	if (rc->engine == REALTIME_ISTREAM_CHUNKED) {
@@ -164,7 +176,7 @@ static int stream_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route 
                         "subscribe", &rc->subscribe,
                         "publish", &rc->publish,
                         NULL)) {
-                        uwsgi_log("[realtime] unable to parse sse action\n");
+                        uwsgi_log("[realtime] unable to parse stream action\n");
                         realtime_destroy_config(rc);
                         uwsgi_buffer_destroy(ub);
                         return UWSGI_ROUTE_BREAK;
@@ -244,6 +256,14 @@ static int webm_router(struct uwsgi_route *ur, char *args) {
         return 0;
 }
 
+static int mjpeg_router(struct uwsgi_route *ur, char *args) {
+        ur->func = mjpeg_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+        ur->custom = REALTIME_MJPEG;
+        return 0;
+}
+
 static int istream_router(struct uwsgi_route *ur, char *args) {
         ur->func = stream_router_func;
         ur->data = args;
@@ -288,6 +308,8 @@ static void realtime_register() {
 	uwsgi_register_router("websocket", websocket_router);
 	uwsgi_register_router("upload", upload_router);
 	uwsgi_register_router("webm", webm_router);
+	uwsgi_register_router("mjpeg", mjpeg_router);
+	uwsgi_register_router("mjpg", mjpeg_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {

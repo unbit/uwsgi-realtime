@@ -44,6 +44,27 @@ int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *uo
 	return -1;
 }
 
+int realtime_write_ubuf(struct uwsgi_buffer *ub, struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
+        // forward the message to the client
+        ssize_t rlen = write(uor->s, ub->buf + uor->pos, uor->to_write);
+        if (rlen > 0) {
+                uor->to_write -= rlen;
+                uor->pos += rlen;
+                if (uor->to_write == 0) {
+                        if (event_queue_fd_write_to_read(ut->queue, uor->s))
+                                return -1;
+                        if (event_queue_add_fd_read(ut->queue, uor->fd))
+                                return -1;
+                        uor->status = 2;
+                }
+                return 0;
+        }
+        else if (rlen < 0) {
+                uwsgi_offload_retry uwsgi_error("realtime_write_ubuf() -> write()/s");
+        }
+        return -1;
+}
+
 int realtime_upload_offload_engine_prepare(struct wsgi_request *wsgi_req, struct uwsgi_offload_request *uor) {
         return 0;
 }
@@ -154,6 +175,10 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 		return realtime_sse_offload_do(ut, uor, fd);
 	}
 
+	if (rc->engine == REALTIME_MJPEG) {
+		return realtime_mjpeg_offload_do(ut, uor, fd);
+	}
+
 	// raw
 	switch (uor->status) {
 		// waiting for connection
@@ -184,8 +209,8 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 					if (message_len > 0) {
 						if (uor->buf)
 							free(uor->buf);
-						uor->buf = uwsgi_concat2n(message, message_len, "", 0);
-						uor->to_write = message_len;
+						uor->buf = uwsgi_concat3n(rc->prefix, rc->prefix_len, message, message_len, rc->suffix, rc->suffix_len);
+						uor->to_write = rc->prefix_len+message_len+rc->suffix_len;
 						uor->pos = 0;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))
 							return -1;

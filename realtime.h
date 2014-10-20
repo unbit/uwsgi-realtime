@@ -11,6 +11,7 @@
 #define REALTIME_INTERLEAVED 7
 #define REALTIME_ISTREAM_CHUNKED 8
 #define REALTIME_RTMPT 9
+#define REALTIME_MJPEG 10
 
 struct realtime_config {
 	uint8_t engine;
@@ -29,6 +30,12 @@ struct realtime_config {
 
 	char *prefix;
 	size_t prefix_len;
+
+	char *suffix;
+	size_t suffix_len;
+
+	char *boundary;
+	size_t boundary_len;
 
 	char *src;
 	char *dst;
@@ -75,6 +82,7 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *, struct uwsgi_offl
 int realtime_sse_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 
 int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *);
+int realtime_write_ubuf(struct uwsgi_buffer *, struct uwsgi_thread *ut, struct uwsgi_offload_request *);
 int realtime_subscribe_ubuf(struct uwsgi_thread *ut, struct uwsgi_offload_request *, int);
 
 int upload_router_func(struct wsgi_request *, struct uwsgi_route *);
@@ -88,3 +96,5 @@ int realtime_interleaved_offload_engine_prepare(struct wsgi_request *, struct uw
 int realtime_interleaved_offload_engine_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 
 int webm_router_func(struct wsgi_request *, struct uwsgi_route *);
+int mjpeg_router_func(struct wsgi_request *, struct uwsgi_route *);
+int realtime_mjpeg_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
