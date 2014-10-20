@@ -115,6 +115,36 @@ RTMPT
 FFmpeg chunked input
 ====================
 
+ffmpeg can send frames via http using chunked input encoding. The webm container is a good one for streaming video
+to web via the html5 tag.
+
+On a macosx system you can send webm/vp8 video frames using:
+
+```sh
+ffmpeg -f avfoundation -i "0" -s 320x240 -r 30 -g 1 -b:v 1M http://address:port/stream.webm
+```
+
+The "istream" offload engine will detect the chunked input and will parse it generating a redis message for each chunk. Those chunks are fully valid webm clusters/blocks so you can stream the "as-is" to the client (you  only need to prepend them with the generic webm header, see below).
+
+This is one of the tests provided with the uwsgi-realtime sources
+
+```ini
+plugin = realtime
+http-socket = :9090
+route = ^/stream.webm$ goto:stream
+route-run = last:
+static-map = /=tests/webm.html
+offload-threads = 1
+
+route-label = stream
+; if GET stream the video
+route-if = equal:${REQUEST_METHOD};GET webm:uwsgi
+; if POST, capture frames and publish them to redis
+route-if = equal:${REQUEST_METHOD};POST istream:uwsgi
+```
+
+You can now simply open with your video player (or with an html5 video tag) the /stream.webm resource
+
 Building an icecast2 compatible server
 ======================================
 
