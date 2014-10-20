@@ -47,6 +47,8 @@ ssize_t realtime_chunked_parse(struct uwsgi_buffer *ub, char **chunk, size_t *ch
 */
 int realtime_istream_chunked_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
 
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+
         switch(uor->status) {
                 // waiting for fd connection
                 case 0:
@@ -60,8 +62,8 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *ut, struct uwsgi_of
                 // wait for s and fd
                 case 1:
                         if (fd == uor->s) {
-				if (uwsgi_buffer_ensure(uor->ubuf1, 4096)) return -1;
-                                ssize_t rlen = read(uor->s, uor->ubuf1->buf + uor->ubuf1->pos, 4096);
+				if (uwsgi_buffer_ensure(uor->ubuf1, rc->buffer_size)) return -1;
+                                ssize_t rlen = read(uor->s, uor->ubuf1->buf + uor->ubuf1->pos, rc->buffer_size);
                                 if (rlen > 0) {
 					uor->ubuf1->pos += rlen;
 					// check if we have a full chunk
@@ -75,7 +77,7 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *ut, struct uwsgi_of
                                         uor->status = 2;
                                         uor->ubuf->pos = 0;
                                         uor->written = 0;
-                                        if (realtime_redis_build_publish(uor->ubuf, chunk, chunk_len, "uwsgi", 5)) return -1;
+                                        if (realtime_redis_build_publish(uor->ubuf, chunk, chunk_len, rc->publish, rc->publish_len)) return -1;
 					if (uwsgi_buffer_decapitate(uor->ubuf1, chunked_rlen)) return -1;
                                         if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
                                         if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
@@ -90,8 +92,8 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *ut, struct uwsgi_of
 
                         if (uor->fd == fd) {
                                 // data from publish channel (consume, end on error)
-                                if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
-                                ssize_t rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+                                if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size)) return -1;
+                                ssize_t rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
                                 if (rlen == 0) return -1;
                                 if (rlen < 0) {
                                         uwsgi_offload_retry

@@ -33,6 +33,8 @@ error:
 int realtime_sse_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
 	ssize_t rlen;
 
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+
 	switch(uor->status) {
                 // waiting for connection
                 case 0:
@@ -49,8 +51,8 @@ int realtime_sse_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reques
                 case 2:
                         if (fd == uor->fd) {
 				// ensure ubuf is big enough
-				if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
-                                rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+				if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size)) return -1;
+                                rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
                                 if (rlen > 0) {
 					uor->ubuf->pos += rlen;
 					// check if we have a full redis message
@@ -60,8 +62,6 @@ int realtime_sse_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reques
 					if (ret > 0) {
 						if (message_len > 0) {
 							if (uor->buf) free(uor->buf);
-							// what to do with the message ?
-							// buf_pos is used as the type (yes, it is ugly, sorry)
 							uint64_t final_len = 0;
 							uor->buf = sse_build(message, message_len, &final_len);
 							if (!uor->buf) return -1;

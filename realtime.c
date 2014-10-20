@@ -25,6 +25,7 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->server) free(rc->server);
 	if (rc->publish) free(rc->publish);
 	if (rc->subscribe) free(rc->subscribe);
+	if (rc->buffer_size_str) free(rc->buffer_size_str);
 	if (rc->sid) free(rc->sid);
 	if (rc->src) free(rc->src);
 	if (rc->dst) free(rc->dst);
@@ -51,6 +52,13 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	if (rc->prefix) {
 		rc->prefix_len = strlen(rc->prefix);
 	}
+	if (rc->buffer_size_str) {
+		rc->buffer_size = atoi(rc->buffer_size_str);
+	}
+	if (!rc->buffer_size) {
+		rc->buffer_size = 4096;
+	}
+	uor.data = rc;
         uor.name = rc->server;
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
 	if (rc->engine == REALTIME_WEBSOCKET) {
@@ -102,6 +110,7 @@ static int sse_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur
 		if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=',
 			"server", &rc->server,
 			"subscribe", &rc->subscribe,
+			"buffer_size", &rc->buffer_size_str,
 			NULL)) {
 			uwsgi_log("[realtime] unable to parse sse action\n");
 			realtime_destroy_config(rc);

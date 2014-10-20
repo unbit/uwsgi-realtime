@@ -39,7 +39,7 @@ int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *uo
 		return 0;
 	}
 	else if (rlen < 0) {
-		uwsgi_offload_retry uwsgi_error("realtime_sse_offload_do() -> write()/s");
+		uwsgi_offload_retry uwsgi_error("realtime_write_buf() -> write()/s");
 	}
 	return -1;
 }
@@ -130,25 +130,27 @@ int realtime_upload_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offl
 int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
 	ssize_t rlen;
 
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+
 	// setup
 	if (fd == -1) {
 		event_queue_add_fd_write(ut->queue, uor->fd);
 		return 0;
 	}
 
-	if (uor->buf_pos == REALTIME_WEBSOCKET) {
+	if (rc->engine == REALTIME_WEBSOCKET) {
 		return realtime_websocket_offload_do(ut, uor, fd);
 	}
 
-	if (uor->buf_pos == REALTIME_ISTREAM) {
+	if (rc->engine == REALTIME_ISTREAM) {
 		return realtime_istream_offload_do(ut, uor, fd);
 	}
 
-	if (uor->buf_pos == REALTIME_ISTREAM_CHUNKED) {
+	if (rc->engine == REALTIME_ISTREAM_CHUNKED) {
 		return realtime_istream_chunked_offload_do(ut, uor, fd);
 	}
 
-	if (uor->buf_pos == REALTIME_SSE) {
+	if (rc->engine == REALTIME_SSE) {
 		return realtime_sse_offload_do(ut, uor, fd);
 	}
 
@@ -169,9 +171,9 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 	case 2:
 		if (fd == uor->fd) {
 			// ensure ubuf is big enough
-			if (uwsgi_buffer_ensure(uor->ubuf, 4096))
+			if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size))
 				return -1;
-			rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+			rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
 			if (rlen > 0) {
 				uor->ubuf->pos += rlen;
 				// check if we have a full redis message

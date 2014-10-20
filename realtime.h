@@ -20,6 +20,9 @@ struct realtime_config {
 	char *publish;
 	size_t publish_len;
 
+	char *buffer_size_str;
+	size_t buffer_size;
+
 	char *subscribe;
 
 	char *sid;

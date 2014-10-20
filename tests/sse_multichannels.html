@@ -2,6 +2,17 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <style type="text/css">
+div {
+	border: solid 2px green;
+	width: 200px;
+	height: 768px;
+	position: absolute;
+	font-size: 11px;
+	overflow: auto;
+	padding: 2px;
+    }
+  </style>
 </head>
 <body>
   <script>
@@ -16,9 +27,10 @@
     }
   </script>
 </body>
+<h1>SSE multichannel test</h1>
 <div id="channel_1"><h1>channel 1</h1></div>
-<div id="channel_2"><h1>channel 2</h1></div>
-<div id="channel_3"><h1>channel 3</h1></div>
-<div id="channel_4"><h1>channel 4</h1></div>
-<div id="channel_5"><h1>channel 5</h1></div>
+<div id="channel_2" style="left: 220px"><h1>channel 2</h1></div>
+<div id="channel_3" style="left: 440px"><h1>channel 3</h1></div>
+<div id="channel_4" style="left: 660px"><h1>channel 4</h1></div>
+<div id="channel_5" style="left: 880px"><h1>channel 5</h1></div>
 </html>
