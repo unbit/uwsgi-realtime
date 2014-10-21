@@ -92,11 +92,19 @@ If all goes well you should see 'hello' in your browser. Continue enqueing messa
 More SSE
 ========
 
+Websockets
+==========
+
+SSE is a uni-directional (server->client) technology, if you want a bidirectional approach, websockets are the way to go. Basically all serious browser nowdays support them. They work by holding a connection opened with the server (like SSE) but you can send data to the client from the server.
+
+uWSGI already exposes a high-performance websockets api in its core, but this approach tries to avoid your workers/threads/coroutines to be busy offloading the logic.
+
+Once the websocket connection is estabilished, the offload engine start publishing on redis all of the received (from the client) websockets packets while it send back to the websocket connection (to the client) every messages received in the subscription channel. Every connection can publish and subscribe to different channels or to the same for implementing various patterns.
+
 Socket.io and Engine.io
 =======================
 
-Raw Websockets
-==============
+
 
 HTML5 uploads
 =============
@@ -109,8 +117,12 @@ Why limiting to text messages ? The redis pubsub system can carry binary data to
 RTSP
 ====
 
+work in progress
+
 RTMPT
 =====
+
+work in progress
 
 FFmpeg chunked input
 ====================
@@ -155,6 +167,11 @@ WebM realtime streaming
 
 MJPEG and multipart/x-mixed-replace
 ===================================
+
+```ini
+[uwsgi]
+
+```
 
 Scaling streaming with redis
 ============================
