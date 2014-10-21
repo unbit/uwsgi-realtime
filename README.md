@@ -179,5 +179,16 @@ Scaling streaming with redis
 Supported actions
 =================
 
+* sse
+* sseraw
+* stream
+* istream
+* interleaved
+* socket.io
+* websocket
+* upload
+* webm
+* mjpeg (or mjpg as alias)
+
 Notes
 =====
