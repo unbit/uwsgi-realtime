@@ -143,6 +143,7 @@ The "istream" offload engine will detect the chunked input and will parse it gen
 This is one of the tests provided with the uwsgi-realtime sources
 
 ```ini
+[uwsgi]
 plugin = realtime
 http-socket = :9090
 route = ^/stream.webm$ goto:stream
