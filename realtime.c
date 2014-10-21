@@ -13,6 +13,10 @@
 		websocket -> send received websockets packet to message dispatcher, send received messagess from the message diaptcher to the client as websocket packets
 		upload -> store the request input to a file
 		webm -> send valid webm header and then start broadcasting video chunks from the message dispatcher
+		interleaved
+		mjpg/mjpeg
+		mpng
+		rtsp
 */
 
 extern struct uwsgi_server uwsgi;
@@ -75,7 +79,7 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
 	}
-	else if (rc->engine == REALTIME_MJPEG) {
+	else if (rc->engine == REALTIME_MJPEG || REALTIME_RTSP) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 	// TODO this should be applied to plain ISTREAM too
@@ -93,11 +97,14 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
                 	wsgi_req->proto_parser_remains = 0;
         	}
 	}
-	if (uwsgi_buffer_append(uor.ubuf, "*2\r\n$9\r\nSUBSCRIBE\r\n$", 20)) goto error;
-	if (uwsgi_buffer_num64(uor.ubuf, strlen(rc->subscribe))) goto error;
-	if (uwsgi_buffer_append(uor.ubuf, "\r\n", 2)) goto error;
-	if (uwsgi_buffer_append(uor.ubuf, rc->subscribe, strlen(rc->subscribe))) goto error;
-	if (uwsgi_buffer_append(uor.ubuf, "\r\n", 2)) goto error;
+
+	if (rc->subscribe) {
+		if (uwsgi_buffer_append(uor.ubuf, "*2\r\n$9\r\nSUBSCRIBE\r\n$", 20)) goto error;
+		if (uwsgi_buffer_num64(uor.ubuf, strlen(rc->subscribe))) goto error;
+		if (uwsgi_buffer_append(uor.ubuf, "\r\n", 2)) goto error;
+		if (uwsgi_buffer_append(uor.ubuf, rc->subscribe, strlen(rc->subscribe))) goto error;
+		if (uwsgi_buffer_append(uor.ubuf, "\r\n", 2)) goto error;
+	}
 	uor.free = realtime_offload_destroy_config;
         return uwsgi_offload_run(wsgi_req, &uor, NULL);
 error:
@@ -287,6 +294,14 @@ static int interleaved_router(struct uwsgi_route *ur, char *args) {
         return 0;
 }
 
+static int rtsp_router(struct uwsgi_route *ur, char *args) {
+        ur->func = rtsp_router_func;
+        ur->data = args;
+        ur->data_len = strlen(args);
+	ur->custom = REALTIME_RTSP;
+        return 0;
+}
+
 static int websocket_router(struct uwsgi_route *ur, char *args) {
         ur->func = stream_router_func;
         ur->data = args;
@@ -310,13 +325,14 @@ static void realtime_register() {
 	uwsgi_register_router("sseraw", sseraw_router);
 	uwsgi_register_router("stream", stream_router);
 	uwsgi_register_router("istream", istream_router);
-	uwsgi_register_router("interleaved", interleaved_router);
 	uwsgi_register_router("socket.io", socketio_router);
 	uwsgi_register_router("websocket", websocket_router);
 	uwsgi_register_router("upload", upload_router);
 	uwsgi_register_router("webm", webm_router);
 	uwsgi_register_router("mjpeg", mjpeg_router);
 	uwsgi_register_router("mjpg", mjpeg_router);
+	uwsgi_register_router("rtsp", rtsp_router);
+	uwsgi_register_router("interleaved", interleaved_router);
 }
 
 struct uwsgi_plugin realtime_plugin = {

@@ -149,7 +149,6 @@ int realtime_upload_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offl
                 3 -> write to s (client)
 */
 int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
-	ssize_t rlen;
 
 	struct realtime_config *rc = (struct realtime_config *) uor->data;
 
@@ -178,6 +177,12 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 	if (rc->engine == REALTIME_MJPEG) {
 		return realtime_mjpeg_offload_do(ut, uor, fd);
 	}
+
+	if (rc->engine == REALTIME_RTSP) {
+		return realtime_rtsp_offload_do(ut, uor, fd);
+	}
+
+	ssize_t rlen;
 
 	// raw
 	switch (uor->status) {

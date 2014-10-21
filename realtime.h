@@ -12,6 +12,8 @@
 #define REALTIME_ISTREAM_CHUNKED 8
 #define REALTIME_RTMPT 9
 #define REALTIME_MJPEG 10
+#define REALTIME_MPNG 11
+#define REALTIME_RTSP 12
 
 struct realtime_config {
 	uint8_t engine;
@@ -98,3 +100,6 @@ int realtime_interleaved_offload_engine_do(struct uwsgi_thread *, struct uwsgi_o
 int webm_router_func(struct wsgi_request *, struct uwsgi_route *);
 int mjpeg_router_func(struct wsgi_request *, struct uwsgi_route *);
 int realtime_mjpeg_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int rtsp_router_func(struct wsgi_request *, struct uwsgi_route *);
+int realtime_rtsp_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
