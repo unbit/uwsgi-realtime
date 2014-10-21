@@ -153,6 +153,9 @@ Building an icecast2 compatible server
 WebM realtime streaming
 =======================
 
+MJPEG and multipart/x-mixed-replace
+===================================
+
 Scaling streaming with redis
 ============================
 
