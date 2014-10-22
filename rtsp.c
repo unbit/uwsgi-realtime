@@ -165,15 +165,19 @@ static int rtsp_parse(char *buf, size_t len, char **method, size_t *method_len, 
 	return 0;
 }
 
-static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2) {
+static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, char **rtp, size_t *rtp_len, uint8_t *channel) {
 	char *buf = ub->buf;
 	size_t len = ub->pos;
 
-	uwsgi_log("%.*s\n", len, buf);
-	
 	// interleaved frame ?
 	if (buf[0] == '$') {
-		return 0;
+		if (len < 4) return 0;
+        	*channel = buf[1];
+        	uint16_t pktsize = uwsgi_be16(buf + 2);
+        	if (len < (size_t) (4 + pktsize)) return 0;
+        	*rtp = buf + 4;
+        	*rtp_len = pktsize;
+        	return 4 + pktsize;
 	}
 	// HTTP like ?
 	else {
@@ -325,8 +329,6 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 
         struct realtime_config *rc = (struct realtime_config *) uor->data;
 
-	uwsgi_log("status = %d\n", uor->status);
-
         switch(uor->status) {
                 // waiting for fd connection
                 case 0:
@@ -350,48 +352,54 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
                                         return -1;
                                 }
 				uor->ubuf->pos += rlen;
-				ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1);
+				char *rtp = NULL;
+				size_t rtp_len = 0;
+				uint8_t channel = 0;
+				ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
 				if (ret > 0) {
-					if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-					uor->status = 2;
                                         uor->written = 0;					
-					uwsgi_log("%.*s\n", uor->ubuf1->pos, uor->ubuf1->buf);
-					if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
-                                        if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+					if (rtp) {
+						uor->status = 3;
+						if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
+						if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
+                                        	if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
+					}
+					else {
+						uor->status = 2;
+						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
+                                        	if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+					}
+					if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
 					return 0;	
 				}
                                 return ret;
                         }
-			return -1;
 
-/*
                         if (uor->fd == fd) {
                                 // data from publish channel (consume, end on error)
-                                if (uwsgi_buffer_ensure(uor->ubuf, 4096)) return -1;
-                                ssize_t rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, 4096);
+                                if (uwsgi_buffer_ensure(uor->ubuf2, rc->buffer_size)) return -1;
+                                ssize_t rlen = read(uor->fd, uor->ubuf2->buf + uor->ubuf2->pos, rc->buffer_size);
                                 if (rlen == 0) return -1;
                                 if (rlen < 0) {
                                         uwsgi_offload_retry
-                                        uwsgi_error("realtime_istream_offload_do() -> read()");
+                                        uwsgi_error("realtime_rtsp_offload_do() -> read()");
                                         return -1;
                                 }
-                                uor->ubuf->pos += rlen;
+                                uor->ubuf2->pos += rlen;
                                 char array_type;
                                 char *array;
                                 int64_t array_len;
-                                ssize_t ret = urt_redis_parse(uor->ubuf->buf, uor->ubuf->pos, &array_type, &array_len, &array);
+                                ssize_t ret = urt_redis_parse(uor->ubuf2->buf, uor->ubuf2->pos, &array_type, &array_len, &array);
                                 if (ret > 0) {
-                                        if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+                                        if (uwsgi_buffer_decapitate(uor->ubuf2, ret)) return -1;
                                         return 0;
                                 }
                                 return ret;
                         }
-*/
                         return -1;
                 case 2:
                         // send response to client
                         if (fd == uor->s) {
-				uwsgi_log("ready to write %d\n", uor->ubuf1->pos-uor->written);
                                 ssize_t rlen = write(uor->s, uor->ubuf1->buf + uor->written, uor->ubuf1->pos-uor->written);
                                 if (rlen > 0) {
                                         uor->written += rlen;
@@ -402,6 +410,28 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
                                                 uor->status = 1;
                                                 if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
                                                 if (event_queue_fd_write_to_read(ut->queue, uor->s)) return -1;
+                                        }
+                                        return 0;
+                                }
+                                else if (rlen < 0) {
+                                        uwsgi_offload_retry
+                                        uwsgi_error("realtime_rtsp_offload_do() -> write()");
+                                }
+                        }
+                        return -1;
+		case 3:
+			// publish rtp packet
+                        if (fd == uor->fd) {
+                                ssize_t rlen = write(uor->fd, uor->ubuf1->buf + uor->written, uor->ubuf1->pos-uor->written);
+                                if (rlen > 0) {
+                                        uor->written += rlen;
+                                        if (uor->written >= (size_t)uor->ubuf1->pos) {
+                                                // reset buffer
+                                                uor->ubuf1->pos = 0;
+                                                // back to wait
+                                                uor->status = 1;
+                                                if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
+                                                if (event_queue_fd_write_to_read(ut->queue, uor->fd)) return -1;
                                         }
                                         return 0;
                                 }
