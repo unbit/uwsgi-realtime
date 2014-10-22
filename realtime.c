@@ -79,7 +79,7 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
 	}
-	else if (rc->engine == REALTIME_MJPEG || REALTIME_RTSP) {
+	else if (rc->engine == REALTIME_MJPEG || rc->engine == REALTIME_RTSP) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 	// TODO this should be applied to plain ISTREAM too
