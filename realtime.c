@@ -33,6 +33,7 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->suffix) free(rc->suffix);
 	if (rc->boundary) free(rc->boundary);
 	if (rc->buffer_size_str) free(rc->buffer_size_str);
+	if (rc->video_demuxer) free(rc->video_demuxer);
 	if (rc->sid) free(rc->sid);
 	if (rc->src) free(rc->src);
 	if (rc->dst) free(rc->dst);
@@ -81,6 +82,7 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	}
 	else if (rc->engine == REALTIME_MJPEG || rc->engine == REALTIME_RTSP) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
+		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 
 	if (rc->engine == REALTIME_RTSP) {

@@ -45,6 +45,9 @@ struct realtime_config {
 
 	uint8_t fps;
 
+	char *video_demuxer;
+	int (*video_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+	uint32_t video_last_ts;
 	char *video_codec;
 	uint8_t video_id;
 	uint16_t width;
@@ -103,3 +106,6 @@ int realtime_mjpeg_offload_do(struct uwsgi_thread *, struct uwsgi_offload_reques
 
 int rtsp_router_func(struct wsgi_request *, struct uwsgi_route *);
 int realtime_rtsp_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int realtime_rtp_png(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+int realtime_rtp_vp8(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);

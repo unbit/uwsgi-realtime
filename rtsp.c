@@ -267,16 +267,28 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                 if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=',
                         "server", &rc->server,
                         "publish", &rc->publish,
+                        "video_demuxer", &rc->video_demuxer,
                         NULL)) {
                         uwsgi_log("[realtime] unable to parse stream action\n");
-                        realtime_destroy_config(rc);
-                        uwsgi_buffer_destroy(ub);
-                        return UWSGI_ROUTE_BREAK;
+			goto end;
                 }
         }
         else {
                 rc->publish = uwsgi_str(ub->buf);
         }
+
+	if (rc->video_demuxer) {
+		if (!strcmp(rc->video_demuxer, "png")) {
+			rc->video_rtp_demuxer = realtime_rtp_png;
+		}
+		if (!strcmp(rc->video_demuxer, "vp8")) {
+			rc->video_rtp_demuxer = realtime_rtp_vp8;
+		}
+		else {
+			uwsgi_log("[realtime] invalid video demuxer: %s\n", rc->video_demuxer);
+                        goto end;
+		}
+	}
 
 	uint16_t cseq_len = 0;
 	char *cseq = uwsgi_get_var(wsgi_req, "HTTP_CSEQ", 9, &cseq_len); 
@@ -362,22 +374,31 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 				if (ret > 0) {
                                         uor->written = 0;					
 					if (rtp) {
-						uint16_t rtp_seq = 0;
-						uint32_t rtp_timestamp = 0;
-						memcpy(&rtp_seq, rtp + 2, 2);
-						memcpy(&rtp_timestamp, rtp + 4, 4);
-						uwsgi_log("channel = %d size = %d seq = %u ts = %u M = %d\n", channel, rtp_len, ntohs(rtp_seq), ntohl(rtp_timestamp), (rtp[1] >> 7) & 0x01);
-						uor->status = 3;
-						if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
-						if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
-                                        	if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
+						if (channel == 0) {
+							if (rc->video_rtp_demuxer) {
+								int rtp_ret = rc->video_rtp_demuxer(rc, uor->ubuf3, rtp, rtp_len);
+								if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+								if (rtp_ret <= 0) return rtp_ret;
+								if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf3->buf, uor->ubuf3->pos, rc)) return -1;
+							}
+							else {
+								if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
+								if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+							}
+							uor->status = 3;
+							if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
+                                        		if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
+						}
+						else {
+							if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+						}
 					}
 					else {
+						if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
 						uor->status = 2;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
                                         	if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
 					}
-					if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
 					return 0;	
 				}
                                 return ret;
