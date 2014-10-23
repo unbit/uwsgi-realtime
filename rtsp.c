@@ -79,7 +79,7 @@ static ssize_t rtsp_find_rnrn(char *buf, size_t len) {
 }
 
 // we are interested in the HTTP Method, the Content-Length, the Transport and the Cseq headers to build a response
-static int rtsp_parse(char *buf, size_t len, char **method, size_t *method_len, char **cl, size_t *cl_len, char **cseq, size_t *cseq_len, char **transport, size_t *transport_len) {
+static int rtsp_parse(char *buf, size_t len, char **method, size_t *method_len, size_t *cl, char **cseq, size_t *cseq_len, char **transport, size_t *transport_len) {
 	char *ptr = buf;
 	char *watermark = buf + len;
 	char *base = ptr;
@@ -148,8 +148,7 @@ static int rtsp_parse(char *buf, size_t len, char **method, size_t *method_len, 
 			}
 			else if (!uwsgi_strnicmp(base, colon-base, "Content-Length", 14)) {
                                 if ((colon-base) + 2 >= (ptr-base)) return -1;
-                                *cl = colon + 2;
-                                *cl_len = (ptr-base) - ((colon-base) + 2);
+                                *cl = uwsgi_str_num(colon + 2, (ptr-base) - ((colon-base) + 2));
                         }
 			else if (!uwsgi_strnicmp(base, colon-base, "Transport", 9)) {
                                 if ((colon-base) + 2 >= (ptr-base)) return -1;
@@ -177,6 +176,8 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
         	if (len < (size_t) (4 + pktsize)) return 0;
         	*rtp = buf + 4;
         	*rtp_len = pktsize;
+		// invalid rtp packet
+		if (*rtp_len < 12) return -1;
         	return 4 + pktsize;
 	}
 	// HTTP like ?
@@ -186,18 +187,15 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 		if (rlen == 0) return 0;
 		char *method = NULL;
 		size_t method_len = 0;
-		char *cl = NULL;
-		size_t cl_len = 0;
+		size_t cl = 0;
 		char *cseq = NULL;
 		size_t cseq_len = 0;
 		char *transport = NULL;
 		size_t transport_len = 0;
-		if (rtsp_parse(buf, rlen, &method, &method_len, &cl, &cl_len, &cseq, &cseq_len, &transport, &transport_len)) return -1;
-		uwsgi_log("rlen = %d\n", rlen);
-		uwsgi_log("METHOD = %.*s CL = %.*s CSEQ = %.*s TRANSPORT = %.*s\n", method_len, method, cl_len, cl, cseq_len, cseq, transport_len, transport);
+		if (rtsp_parse(buf, rlen, &method, &method_len, &cl, &cseq, &cseq_len, &transport, &transport_len)) return -1;
 		// need to read the body ?
-		if (cl_len > 0) {
-			if (len < rlen + cl_len) return 0;
+		if (cl > 0) {
+			if (len < rlen + cl) return 0;
 		}
 
 		if (!uwsgi_strncmp(method, method_len, "OPTIONS", 7)) {
@@ -209,7 +207,7 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 				if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
 			}
 			if (uwsgi_buffer_append(ub2, "Public: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE, RECORD\r\n\r\n", 58)) return -1;
-			return rlen + cl_len;
+			return rlen + cl;
 		}
 
 		else if (!uwsgi_strncmp(method, method_len, "SETUP", 5)) {
@@ -226,10 +224,15 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
                                 if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
                         }
 			if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
-                        return rlen + cl_len;
+                        return rlen + cl;
                 }
 
-		else if (!uwsgi_strncmp(method, method_len, "RECORD", 6)) {
+		// close the connection
+		else if (!uwsgi_strncmp(method, method_len, "TEARDOWN", 8)) {
+			return -1;
+		}
+
+		else {
                         ub2->pos = 0;
                         if (uwsgi_buffer_append(ub2, "RTSP/1.0 200 OK\r\n", 17)) return -1;
                         if (cseq_len > 0) {
@@ -238,7 +241,7 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
                                 if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
                         }
                         if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
-                        return rlen + cl_len;
+                        return rlen + cl;
                 }
 
 		return 0;
@@ -359,6 +362,11 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 				if (ret > 0) {
                                         uor->written = 0;					
 					if (rtp) {
+						uint16_t rtp_seq = 0;
+						uint32_t rtp_timestamp = 0;
+						memcpy(&rtp_seq, rtp + 2, 2);
+						memcpy(&rtp_timestamp, rtp + 4, 4);
+						uwsgi_log("channel = %d size = %d seq = %u ts = %u M = %d\n", channel, rtp_len, ntohs(rtp_seq), ntohl(rtp_timestamp), (rtp[1] >> 7) & 0x01);
 						uor->status = 3;
 						if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
 						if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
