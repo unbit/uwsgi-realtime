@@ -62,9 +62,18 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	size_t len = rtp_len - header_size;
 
 	uint8_t extended = (buf[0] >> 7 ) & 0x01;
+	uint8_t has_pictureid = 0;
 	if (extended && len < 2) return -1;
 	uint8_t start_of_partition = (buf[0] >> 4 ) & 0x01;
 	uint8_t pid = buf[0] & 0x7;
-	uwsgi_log("[%u %u] marker = %u extended = %d start_of_partition %d partition %d\n", rtp_len, ts, marker, extended, start_of_partition, pid);
+	if (extended) {
+		has_pictureid = (buf[1] >> 7) & 0x01;
+	}
+	if (has_pictureid && len < 3) return -1;
+	uint8_t pictureid = 0;
+	if (has_pictureid) {
+		pictureid = buf[2] & 0x7f;
+	}
+	uwsgi_log("[%u %u] marker = %u extended = %d pictureid = %d start_of_partition %d partition %d\n", rtp_len, ts, marker, extended, pictureid, start_of_partition, pid);
 	return marker;
 }
