@@ -63,17 +63,42 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 
 	uint8_t extended = (buf[0] >> 7 ) & 0x01;
 	uint8_t has_pictureid = 0;
+	uint8_t has_tl0 = 0;
+	uint8_t has_tid = 0;
+	uint8_t has_keyidx = 0;
+
 	if (extended && len < 2) return -1;
 	uint8_t start_of_partition = (buf[0] >> 4 ) & 0x01;
 	uint8_t pid = buf[0] & 0x7;
 	if (extended) {
+		header_size++;
 		has_pictureid = (buf[1] >> 7) & 0x01;
+		has_tl0 = (buf[1] >> 6) & 0x1f;
+		has_tid = (buf[1] >> 5) & 0xf;
+		has_keyidx = (buf[1] >> 4) & 0x7;
 	}
 	if (has_pictureid && len < 3) return -1;
-	uint8_t pictureid = 0;
+	uint16_t pictureid = 0;
+	uint8_t m = 0;
 	if (has_pictureid) {
-		pictureid = buf[2] & 0x7f;
+		header_size++;
+		m = (buf[2] >> 7) & 0x01;
+		if (m) {
+			header_size++;
+			buf[2] = buf[2] & 0x7f;
+			memcpy(&pictureid, buf + 2, 2);
+			pictureid = ntohs(pictureid);
+			
+		}
+		else {
+			pictureid = buf[2] & 0x7f;
+		}
+		
 	}
-	uwsgi_log("[%u %u] marker = %u extended = %d pictureid = %d start_of_partition %d partition %d\n", rtp_len, ts, marker, extended, pictureid, start_of_partition, pid);
+
+	if (has_tl0) header_size++;
+	if (has_tid || has_keyidx) header_size++;
+
+	uwsgi_log("[%u %u] marker = %u extended = %d pictureid = %u/%u start_of_partition %d partition %d header_size %d\n", rtp_len, ts, marker, extended, pictureid, m, start_of_partition, pid, header_size);
 	return marker;
 }
