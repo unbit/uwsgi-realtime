@@ -117,7 +117,16 @@ Why limiting to text messages ? The redis pubsub system can carry binary data to
 RTSP
 ====
 
-work in progress
+The engine supports ONLY interleaved mode (encapsulation of rtp packets over HTTP) and works with the ``--http-manage-rtsp`` option of the uWSGI HTTP router.
+
+The engine can simply forward rtp packets to the message dispatcher (so you can process them in an external task) or can "demux" them. Currently the following demuxers are supported:
+
+* PNG (as rfc draft http://tools.ietf.org/html/draft-boyaci-avt-png-00)
+* VP8 (as rfc draft https://tools.ietf.org/html/draft-ietf-payload-vp8-13)
+* Vorbis (work in progress)
+* H264 (work in progress)
+
+demuxers extract the codec payload (eventually reassembling it) and forward it to the message dispatcher
 
 RTMPT
 =====
