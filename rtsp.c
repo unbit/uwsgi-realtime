@@ -329,6 +329,51 @@ end:
         return UWSGI_ROUTE_BREAK;
 }
 
+int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
+	uwsgi_log("rtsp_check\n");
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+	char *rtp = NULL;
+        size_t rtp_len = 0;
+        uint8_t channel = 0;
+        ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
+        if (ret > 0) {
+                                        uor->written = 0;
+                                        if (rtp) {
+                                                if (channel == 0) {
+                                                        if (rc->video_rtp_demuxer) {
+                                                                int rtp_ret = rc->video_rtp_demuxer(rc, uor->ubuf3, rtp, rtp_len);
+                                                                uwsgi_log("decapitate = %d %d\n", ret, uor->ubuf->pos);
+                                                                if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+                                                                uwsgi_log("decapitateD = %d %d\n", ret, uor->ubuf->pos);
+                                                                if (rtp_ret < 0) return -1;
+								// more data ?
+								if (rtp_ret == 0) return rtsp_check(ut, uor);
+                                                                if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf3->buf, uor->ubuf3->pos, rc)) return -1;
+                                                        }
+                                                        else {
+                                                                if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
+                                                                if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+                                                        }
+                                                        uor->status = 3;
+                                                        if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
+                                                        if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
+                                                }
+                                                else {
+                                                        if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+                                                }
+                                        }
+                                        else {
+                                                if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+                                                uor->status = 2;
+                                                if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
+                                                if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
+                                        }
+                                        return 0;
+                                }
+	uwsgi_log("OPS\n");
+	return ret;
+}
+
 /*
 
 	RTSP offload engine
@@ -359,7 +404,9 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 			// HTTP/RTSP request
                         if (fd == uor->s) {
 				if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size)) return -1;		
+				uwsgi_log("%llu %d\n", uor->ubuf->pos, rc->buffer_size);
                                 ssize_t rlen = read(uor->s, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
+				uwsgi_log("rlen = %d\n", rlen);
 				if (rlen == 0) return -1;
                                 if (rlen < 0) {
                                         uwsgi_offload_retry
@@ -367,41 +414,7 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
                                         return -1;
                                 }
 				uor->ubuf->pos += rlen;
-				char *rtp = NULL;
-				size_t rtp_len = 0;
-				uint8_t channel = 0;
-				ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
-				if (ret > 0) {
-                                        uor->written = 0;					
-					if (rtp) {
-						if (channel == 0) {
-							if (rc->video_rtp_demuxer) {
-								int rtp_ret = rc->video_rtp_demuxer(rc, uor->ubuf3, rtp, rtp_len);
-								if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-								if (rtp_ret <= 0) return rtp_ret;
-								if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf3->buf, uor->ubuf3->pos, rc)) return -1;
-							}
-							else {
-								if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc)) return -1;
-								if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-							}
-							uor->status = 3;
-							if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
-                                        		if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
-						}
-						else {
-							if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-						}
-					}
-					else {
-						if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-						uor->status = 2;
-						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
-                                        	if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
-					}
-					return 0;	
-				}
-                                return ret;
+				return rtsp_check(ut, uor);
                         }
 
                         if (uor->fd == fd) {
@@ -439,8 +452,9 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
                                                 uor->status = 1;
                                                 if (event_queue_add_fd_read(ut->queue, uor->fd)) return -1;
                                                 if (event_queue_fd_write_to_read(ut->queue, uor->s)) return -1;
+                                        	return rtsp_check(ut, uor);
                                         }
-                                        return 0;
+					return 0;
                                 }
                                 else if (rlen < 0) {
                                         uwsgi_offload_retry
@@ -461,8 +475,9 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
                                                 uor->status = 1;
                                                 if (event_queue_add_fd_read(ut->queue, uor->s)) return -1;
                                                 if (event_queue_fd_write_to_read(ut->queue, uor->fd)) return -1;
+                                        	return rtsp_check(ut, uor);
                                         }
-                                        return 0;
+					return 0;
                                 }
                                 else if (rlen < 0) {
                                         uwsgi_offload_retry

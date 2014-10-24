@@ -22,6 +22,8 @@ They generally translates (and reassemble)from RTP to web-friendly format:
 
 int realtime_rtp_png(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
 	uint8_t marker = (rtp[1] >> 7) & 0x01;
+	uint8_t padding = (rtp[0] >> 5) & 0x01;
+	if (padding) rtp_len--;
 	uint32_t ts = 0;
 	memcpy(&ts, rtp + 2, 4);
 	ts = htonl(ts);
@@ -47,6 +49,8 @@ int realtime_rtp_png(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 
 int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
 	uint8_t marker = (rtp[1] >> 7) & 0x01;
+	uint8_t padding = (rtp[0] >> 5) & 0x01;
+	if (padding) rtp_len--;
         uint32_t ts = 0;
         memcpy(&ts, rtp + 2, 4);
         ts = htonl(ts);
@@ -100,5 +104,19 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	if (has_tid || has_keyidx) header_size++;
 
 	uwsgi_log("[%u %u] marker = %u extended = %d pictureid = %u/%u start_of_partition %d partition %d header_size %d\n", rtp_len, ts, marker, extended, pictureid, m, start_of_partition, pid, header_size);
+
+	if (start_of_partition && pid == 0) {
+		ub->pos = 0;
+	}
+
+	uint64_t hash = 0;
+	size_t i;
+	for(i=header_size;i<rtp_len - header_size;i++) {
+		hash += rtp[i];
+	}
+
+	if (uwsgi_buffer_append(ub, rtp + header_size, rtp_len - header_size)) return -1;
+
+	uwsgi_log("len = %d pos = %d hash %llu \n", ub->len, ub->pos, hash);
 	return marker;
 }
