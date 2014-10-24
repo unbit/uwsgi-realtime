@@ -126,7 +126,14 @@ The engine can simply forward rtp packets to the message dispatcher (so you can 
 * Vorbis (work in progress)
 * H264 (work in progress)
 
-demuxers extract the codec payload (eventually reassembling it) and forward it to the message dispatcher
+demuxers extract the codec payload (eventually reassembling it) and forward it to the message dispatcher.
+
+Forwarding raw codec payloads could not be very useful (unless you do not need time sync), for this reason "muxers" are available.
+
+Currently the following "muxers" are available:
+
+* webm (place every frame/sample in a webm cluster structure)
+* mov/mpeg4 (work in progress)
 
 RTMPT
 =====
