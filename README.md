@@ -128,7 +128,7 @@ The engine can simply forward rtp packets to the message dispatcher (so you can 
 
 demuxers extract the codec payload (eventually reassembling it) and forward it to the message dispatcher.
 
-Forwarding raw codec payloads could not be very useful (unless you do not need time sync), for this reason "muxers" are available.
+Forwarding raw codec payloads could not be very useful (unless you do not need time sync), for this reason "muxers" are available too.
 
 Currently the following "muxers" are available:
 
