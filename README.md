@@ -206,6 +206,7 @@ Supported actions
 * upload
 * webm
 * mjpeg (or mjpg as alias)
+* rtsp
 
 Notes
 =====
