@@ -180,8 +180,8 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 		if (*rtp_len < 12) return -1;
         	return 4 + pktsize;
 	}
-	// HTTP like ?
-	else {
+
+	// HTTp like ?
 		ssize_t rlen = rtsp_find_rnrn(buf, len);
 		if (rlen < 0) return -1;
 		if (rlen == 0) return 0;
@@ -245,9 +245,6 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
                 }
 
 		return 0;
-	}
-
-	return 1;
 }
 
 int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
@@ -330,21 +327,17 @@ end:
 }
 
 int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
-	uwsgi_log("rtsp_check\n");
 	struct realtime_config *rc = (struct realtime_config *) uor->data;
 	char *rtp = NULL;
         size_t rtp_len = 0;
         uint8_t channel = 0;
         ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
         if (ret > 0) {
-                                        uor->written = 0;
                                         if (rtp) {
                                                 if (channel == 0) {
                                                         if (rc->video_rtp_demuxer) {
                                                                 int rtp_ret = rc->video_rtp_demuxer(rc, uor->ubuf3, rtp, rtp_len);
-                                                                uwsgi_log("decapitate = %d %d\n", ret, uor->ubuf->pos);
                                                                 if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
-                                                                uwsgi_log("decapitateD = %d %d\n", ret, uor->ubuf->pos);
                                                                 if (rtp_ret < 0) return -1;
 								// more data ?
 								if (rtp_ret == 0) return rtsp_check(ut, uor);
@@ -355,22 +348,25 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
                                                                 if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
                                                         }
                                                         uor->status = 3;
+							uor->written = 0;	
                                                         if (event_queue_del_fd(ut->queue, uor->s, event_queue_read())) return -1;
                                                         if (event_queue_fd_read_to_write(ut->queue, uor->fd)) return -1;
                                                 }
                                                 else {
                                                         if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
+							// again
+							return rtsp_check(ut, uor);
                                                 }
                                         }
                                         else {
                                                 if (uwsgi_buffer_decapitate(uor->ubuf, ret)) return -1;
                                                 uor->status = 2;
+						uor->written = 0;	
                                                 if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read())) return -1;
                                                 if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
                                         }
                                         return 0;
                                 }
-	uwsgi_log("OPS\n");
 	return ret;
 }
 
@@ -385,6 +381,7 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 	
 
 */
+
 int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
 
         struct realtime_config *rc = (struct realtime_config *) uor->data;
@@ -404,9 +401,7 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 			// HTTP/RTSP request
                         if (fd == uor->s) {
 				if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size)) return -1;		
-				uwsgi_log("%llu %d\n", uor->ubuf->pos, rc->buffer_size);
                                 ssize_t rlen = read(uor->s, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
-				uwsgi_log("rlen = %d\n", rlen);
 				if (rlen == 0) return -1;
                                 if (rlen < 0) {
                                         uwsgi_offload_retry

@@ -14,6 +14,7 @@
 #define REALTIME_MJPEG 10
 #define REALTIME_MPNG 11
 #define REALTIME_RTSP 12
+#define REALTIME_WEBM 14
 
 struct realtime_config {
 	uint8_t engine;
@@ -45,8 +46,11 @@ struct realtime_config {
 
 	uint8_t fps;
 
+	uint32_t ts;
+
 	char *video_demuxer;
 	int (*video_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+
 	uint32_t video_last_ts;
 	char *video_codec;
 	uint8_t video_id;
@@ -87,7 +91,7 @@ int realtime_istream_chunked_offload_do(struct uwsgi_thread *, struct uwsgi_offl
 int realtime_sse_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
 
 int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *);
-int realtime_write_ubuf(struct uwsgi_buffer *, struct uwsgi_thread *ut, struct uwsgi_offload_request *);
+int realtime_write_ubuf(struct uwsgi_buffer *, struct uwsgi_thread *ut, struct uwsgi_offload_request *, int status);
 int realtime_subscribe_ubuf(struct uwsgi_thread *ut, struct uwsgi_offload_request *, int);
 
 int upload_router_func(struct wsgi_request *, struct uwsgi_route *);
@@ -109,3 +113,6 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request
 
 int realtime_rtp_png(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 int realtime_rtp_vp8(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+
+int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *, char *, size_t);
+int realtime_webm_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

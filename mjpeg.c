@@ -132,7 +132,7 @@ int realtime_mjpeg_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_requ
                 return -1;
                 // write event on s
         case 3:
-                return realtime_write_ubuf(uor->ubuf1, ut, uor);
+                return realtime_write_ubuf(uor->ubuf1, ut, uor, 2);
         default:
                 break;
         }

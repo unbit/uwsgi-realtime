@@ -44,18 +44,18 @@ int realtime_write_buf(struct uwsgi_thread *ut, struct uwsgi_offload_request *uo
 	return -1;
 }
 
-int realtime_write_ubuf(struct uwsgi_buffer *ub, struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
+int realtime_write_ubuf(struct uwsgi_buffer *ub, struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int status) {
         // forward the message to the client
-        ssize_t rlen = write(uor->s, ub->buf + uor->pos, uor->to_write);
+        ssize_t rlen = write(uor->s, ub->buf + uor->written, ub->pos - uor->written);
         if (rlen > 0) {
-                uor->to_write -= rlen;
-                uor->pos += rlen;
-                if (uor->to_write == 0) {
+		uor->written += rlen;
+                if (uor->written >= (size_t)ub->pos) {
                         if (event_queue_fd_write_to_read(ut->queue, uor->s))
                                 return -1;
                         if (event_queue_add_fd_read(ut->queue, uor->fd))
                                 return -1;
-                        uor->status = 2;
+			ub->pos = 0;
+                        uor->status = status;
                 }
                 return 0;
         }
@@ -182,6 +182,10 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 		return realtime_rtsp_offload_do(ut, uor, fd);
 	}
 
+	if (rc->engine == REALTIME_WEBM) {
+		return realtime_webm_offload_do(ut, uor, fd);
+	}
+
 	ssize_t rlen;
 
 	// raw
@@ -212,10 +216,14 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 				ssize_t ret = urt_redis_pubsub(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
 				if (ret > 0) {
 					if (message_len > 0) {
-						if (uor->buf)
-							free(uor->buf);
-						uor->buf = uwsgi_concat3n(rc->prefix, rc->prefix_len, message, message_len, rc->suffix, rc->suffix_len);
-						uor->to_write = rc->prefix_len+message_len+rc->suffix_len;
+						//if (uor->buf)
+							//free(uor->buf);
+						uor->ubuf1->pos = 0;
+						if (realtime_webm_cluster(rc, uor->ubuf1, message, message_len)) return -1;
+						//uor->buf = uwsgi_concat3n(rc->prefix, rc->prefix_len, message, message_len, rc->suffix, rc->suffix_len);
+						uor->buf = uor->ubuf1->buf;	
+						//uor->to_write = rc->prefix_len+message_len+rc->suffix_len;
+						uor->to_write = uor->ubuf1->pos;
 						uor->pos = 0;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))
 							return -1;

@@ -75,6 +75,7 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	uor.data = rc;
         uor.name = rc->server;
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);
+	uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 	if (rc->engine == REALTIME_WEBSOCKET) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf2 = uwsgi_buffer_new(uwsgi.page_size);
@@ -83,6 +84,7 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	else if (rc->engine == REALTIME_MJPEG || rc->engine == REALTIME_RTSP) {
 		uor.ubuf1 = uwsgi_buffer_new(uwsgi.page_size);
 		uor.ubuf3 = uwsgi_buffer_new(uwsgi.page_size);
+		uor.ubuf4 = uwsgi_buffer_new(uwsgi.page_size);
 	}
 
 	if (rc->engine == REALTIME_RTSP) {
@@ -272,7 +274,7 @@ static int webm_router(struct uwsgi_route *ur, char *args) {
         ur->func = webm_router_func;
         ur->data = args;
         ur->data_len = strlen(args);
-        ur->custom = REALTIME_RAW;
+        ur->custom = REALTIME_WEBM;
         return 0;
 }
 

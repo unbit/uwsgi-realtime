@@ -198,6 +198,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 
 	uwsgi_buffer_destroy(webm);
 
+	rc->engine = ur->custom;
         if (!realtime_redis_offload(wsgi_req, rc)) {
                 wsgi_req->via = UWSGI_VIA_OFFLOAD;
                 wsgi_req->status = 202;
@@ -208,4 +209,100 @@ end:
 	if (rc) realtime_destroy_config(rc);
         uwsgi_buffer_destroy(ub);
         return UWSGI_ROUTE_BREAK;
+}
+
+int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *ub, char *buf, size_t len) {
+	if (uwsgi_buffer_append(ub, "\x1F\x43\xB6\x75", 4)) return -1;
+	size_t cluster_pos = ub->pos;
+	ub->pos += 8;
+	// CLUSTER
+	if (uwsgi_buffer_append(ub, "\xE7\x84", 2)) return -1;
+	// CLUSTER timecode
+	//if (uwsgi_buffer_u32be(ub, rc->video_last_ts - rc->start_ts)) return -1;
+	if (uwsgi_buffer_u32be(ub, rc->ts)) return -1;
+	rc->ts += 33;
+	// simpleblock
+	if (uwsgi_buffer_append(ub, "\xA3", 1)) return -1;
+	if (realtime_webm_64bit(ub, len + 4)) return -1;
+	// keyframe
+	if (uwsgi_buffer_append(ub, "\x81\x00\x00\x80", 4)) return -1;
+	// payload
+	if (uwsgi_buffer_append(ub, buf, len)) return -1;
+	size_t current_pos = ub->pos;
+	ub->pos = cluster_pos;	
+	if (realtime_webm_64bit(ub, (current_pos - cluster_pos)-8)) return -1;
+	ub->pos = current_pos;
+	return 0;
+}
+
+int realtime_webm_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor, int fd) {
+	struct realtime_config *rc = (struct realtime_config *) uor->data;
+
+        switch (uor->status) {
+                // waiting for connection
+        case 0:
+                if (fd == uor->fd) {
+                        uor->status = 1;
+                        // ok try to send the request right now...
+                        return realtime_redis_offload_engine_do(ut, uor, fd);
+                }
+                return -1;
+                // writing the SUBSCRIBE request
+        case 1:
+                return realtime_subscribe_ubuf(ut, uor, fd);
+                // read event from s or fd
+        case 2:
+                if (fd == uor->fd) {
+                        // ensure ubuf is big enough
+                        if (uwsgi_buffer_ensure(uor->ubuf, rc->buffer_size))
+                                return -1;
+                        ssize_t rlen = read(uor->fd, uor->ubuf->buf + uor->ubuf->pos, rc->buffer_size);
+                        if (rlen > 0) {
+                                uor->ubuf->pos += rlen;
+                                // check if we have a full redis message
+                                int64_t message_len = 0;
+                                char *message;
+                                ssize_t ret = urt_redis_pubsub(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
+                                if (ret > 0) {
+                                        if (message_len > 0) {
+                                                uor->written = 0;
+						// is it a CLUSTER tag ?
+						if (message_len > 4 && (uint8_t) message[0] == 0x1F &&
+									(uint8_t) message[1] == 0x43 &&		
+									(uint8_t) message[2] == 0xB6 &&		
+									(uint8_t) message[3] == 0x75) {
+							if (uwsgi_buffer_append(uor->ubuf1, message, message_len)) return -1;	
+						}
+						// ... if not, mux it
+						else {
+                                                	if (realtime_webm_cluster(rc, uor->ubuf1, message, message_len)) return -1;
+						}
+                                                if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))
+                                                        return -1;
+                                                if (event_queue_fd_read_to_write(ut->queue, uor->s))
+                                                        return -1;
+                                                uor->status = 3;
+                                        }
+                                        if (uwsgi_buffer_decapitate(uor->ubuf, ret))
+                                                return -1;
+                                        // again
+                                        ret = 0;
+                                }
+                                // 0 -> again -1 -> error
+                                return ret;
+                        }
+                        if (rlen < 0) {
+                                uwsgi_offload_retry uwsgi_error("realtime_redis_offload_engine_do() -> read()/fd");
+                        }
+                }
+                // an event from the client can only mean disconneciton
+                return -1;
+                // write event on s
+        case 3:
+                return realtime_write_ubuf(uor->ubuf1, ut, uor, 2);
+        default:
+                break;
+        }
+
+        return -1;
 }
