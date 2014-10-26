@@ -113,6 +113,7 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request
 
 int realtime_rtp_png(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 int realtime_rtp_vp8(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+int realtime_rtp_h264(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
 int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *, char *, size_t);
 int realtime_webm_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

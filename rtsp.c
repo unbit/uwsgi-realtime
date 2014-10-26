@@ -278,8 +278,11 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 		if (!strcmp(rc->video_demuxer, "png")) {
 			rc->video_rtp_demuxer = realtime_rtp_png;
 		}
-		if (!strcmp(rc->video_demuxer, "vp8")) {
+		else if (!strcmp(rc->video_demuxer, "vp8")) {
 			rc->video_rtp_demuxer = realtime_rtp_vp8;
+		}
+		else if (!strcmp(rc->video_demuxer, "h264")) {
+			rc->video_rtp_demuxer = realtime_rtp_h264;
 		}
 		else {
 			uwsgi_log("[realtime] invalid video demuxer: %s\n", rc->video_demuxer);

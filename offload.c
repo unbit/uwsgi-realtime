@@ -216,14 +216,10 @@ int realtime_redis_offload_engine_do(struct uwsgi_thread *ut, struct uwsgi_offlo
 				ssize_t ret = urt_redis_pubsub(uor->ubuf->buf, uor->ubuf->pos, &message_len, &message);
 				if (ret > 0) {
 					if (message_len > 0) {
-						//if (uor->buf)
-							//free(uor->buf);
-						uor->ubuf1->pos = 0;
-						if (realtime_webm_cluster(rc, uor->ubuf1, message, message_len)) return -1;
-						//uor->buf = uwsgi_concat3n(rc->prefix, rc->prefix_len, message, message_len, rc->suffix, rc->suffix_len);
-						uor->buf = uor->ubuf1->buf;	
-						//uor->to_write = rc->prefix_len+message_len+rc->suffix_len;
-						uor->to_write = uor->ubuf1->pos;
+						if (uor->buf)
+							free(uor->buf);
+						uor->buf = uwsgi_concat3n(rc->prefix, rc->prefix_len, message, message_len, rc->suffix, rc->suffix_len);
+						uor->to_write = rc->prefix_len+message_len+rc->suffix_len;
 						uor->pos = 0;
 						if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))
 							return -1;
