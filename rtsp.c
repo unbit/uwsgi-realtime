@@ -35,6 +35,7 @@ static int consume_request_body(struct wsgi_request *wsgi_req) {
                 char *buf = uwsgi_request_body_read(wsgi_req, 8192, &rlen);
                 if (!buf) return -1;
                 if (buf == uwsgi.empty) break;
+		uwsgi_log("%.*s\n", rlen, buf);
                 remains -= rlen;
         }
 	return 0;
@@ -231,7 +232,18 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 		else if (!uwsgi_strncmp(method, method_len, "TEARDOWN", 8)) {
 			return -1;
 		}
-
+		else if (!uwsgi_strncmp(method, method_len, "ANNOUNCE", 8)) {
+			ub2->pos = 0;
+                        if (uwsgi_buffer_append(ub2, "RTSP/1.0 200 OK\r\n", 17)) return -1;
+                        if (cseq_len > 0) {
+                                if (uwsgi_buffer_append(ub2, "Cseq: ", 6)) return -1;
+                                if (uwsgi_buffer_append(ub2, cseq, cseq_len)) return -1;
+                                if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
+                        }
+                        if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
+			uwsgi_log("%d %.*s\n",cl,  cl, buf+rlen);
+                        return rlen + cl;
+		}
 		else {
                         ub2->pos = 0;
                         if (uwsgi_buffer_append(ub2, "RTSP/1.0 200 OK\r\n", 17)) return -1;
@@ -335,7 +347,7 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
         size_t rtp_len = 0;
         uint8_t channel = 0;
         ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
-        if (ret > 0) {
+	if (ret <= 0) return ret;
                                         if (rtp) {
                                                 if (channel == 0) {
                                                         if (rc->video_rtp_demuxer) {
@@ -369,8 +381,6 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
                                                 if (event_queue_fd_read_to_write(ut->queue, uor->s)) return -1;
                                         }
                                         return 0;
-                                }
-	return ret;
 }
 
 /*

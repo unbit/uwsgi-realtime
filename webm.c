@@ -275,7 +275,6 @@ int realtime_webm_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 						}
 						// ... if not, mux it
 						else {
-							uwsgi_log("muxing %d bytes\n", message_len);
                                                 	if (realtime_webm_cluster(rc, uor->ubuf1, message, message_len)) return -1;
 						}
                                                 if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))

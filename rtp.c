@@ -137,7 +137,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 
         if (len < 1) return -1;
 
-	uwsgi_log("[AVC] type = %u %u %u\n", buf[0] & 0x1f, buf[1] & 0x1f, marker);
+	uwsgi_log("[AVC] type = %X %X type0=%u type1=%u marker=%u\n", buf[0], buf[1], buf[0] & 0x1f, buf[1] & 0x1f, marker);
 
 	uint8_t nal_type = buf[0] & 0x1f;
 	uint8_t nal_base = buf[0] & 0xe0;
@@ -146,26 +146,33 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		if (len < 2) return -1;
 		// true type
 		nal_type = buf[1] & 0x1f;
+		uint8_t end_bit = (buf[1] >> 6) &0x01;
 		// is it the first packet ?
 		if (buf[1] & 0x80) {
 			ub->pos = 0;
 			// append start code
+			if (uwsgi_buffer_append(ub, "\0\0\0\1gd\x00\r\xac\xb8(?B\x00\x00\x03\x00\x02\x00\x00\x03\x00x\x08\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
 			if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 			// append original nal
-			uwsgi_log("%x\n",  nal_base | nal_type);
 			if (uwsgi_buffer_u8(ub, nal_base | nal_type)) return -1;
 		}
 		buf += 2;
 		len -= 2;
+		marker = end_bit;
 	}
 	else {
 		ub->pos = 0;
 		// append start code
+		if (uwsgi_buffer_append(ub, "\0\0\0\1gd\x00\r\xac\xb8(?B\x00\x00\x03\x00\x02\x00\x00\x03\x00x\x08\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
+		// append start code
 		if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 	}
 
-	uwsgi_log("appending %d\n", len);
 	if (uwsgi_buffer_append(ub, buf, len)) return -1;
+
+	if (marker == 1) {
+		uwsgi_log("sending packet of size %llu\n", ub->pos);
+	}
 
 	return marker;
 }
