@@ -174,6 +174,7 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 		if (len < 4) return 0;
         	*channel = buf[1];
         	uint16_t pktsize = uwsgi_be16(buf + 2);
+		uwsgi_log("RTSP pktsize = %d\n", pktsize);
         	if (len < (size_t) (4 + pktsize)) return 0;
         	*rtp = buf + 4;
         	*rtp_len = pktsize;

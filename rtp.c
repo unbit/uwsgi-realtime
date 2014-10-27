@@ -121,7 +121,10 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
         uint8_t marker = (rtp[1] >> 7) & 0x01;
         uint8_t padding = (rtp[0] >> 5) & 0x01;
-        if (padding) rtp_len--;
+        if (padding) {
+		uwsgi_log("PADDING...\n");
+		rtp_len--;
+	}
         uint32_t ts = 0;
         memcpy(&ts, rtp + 2, 4);
         rc->video_last_ts = ntohl(ts);
@@ -134,6 +137,8 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
         if (header_size >= rtp_len) return -1;
 	char *buf = rtp + header_size;
         size_t len = rtp_len - header_size;
+
+	uwsgi_log("header_size = %d len = %d\n", header_size, len);
 
         if (len < 1) return -1;
 
@@ -151,10 +156,11 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		if (buf[1] & 0x80) {
 			ub->pos = 0;
 			// append start code
-			if (uwsgi_buffer_append(ub, "\0\0\0\1gd\x00\r\xac\xb8(?B\x00\x00\x03\x00\x02\x00\x00\x03\x00x\x08\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
+			if (uwsgi_buffer_append(ub, "\0\0\0\1gz\x10\x1e\xbc\xb8\x14\x07\xb4 \x00\x00\x03\x00 \x00\x00\x07\x80\x80\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
 			if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 			// append original nal
 			if (uwsgi_buffer_u8(ub, nal_base | nal_type)) return -1;
+			uwsgi_log("sending start code\n");
 		}
 		buf += 2;
 		len -= 2;
@@ -163,7 +169,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 	else {
 		ub->pos = 0;
 		// append start code
-		if (uwsgi_buffer_append(ub, "\0\0\0\1gd\x00\r\xac\xb8(?B\x00\x00\x03\x00\x02\x00\x00\x03\x00x\x08\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
+		if (uwsgi_buffer_append(ub, "\0\0\0\1gz\x10\x1e\xbc\xb8\x14\x07\xb4 \x00\x00\x03\x00 \x00\x00\x07\x80\x80\0\0\0\1h\xee\x0f,\x8b", 33)) return -1;
 		// append start code
 		if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 	}
