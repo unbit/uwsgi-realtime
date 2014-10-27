@@ -63,6 +63,7 @@ struct realtime_config {
 	uint8_t audio_id;
 	uint8_t audio_channels;
 	uint16_t audio_freq;
+
 };
 
 void realtime_destroy_config(struct realtime_config *);

@@ -121,10 +121,8 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
         uint8_t marker = (rtp[1] >> 7) & 0x01;
         uint8_t padding = (rtp[0] >> 5) & 0x01;
-        if (padding) {
-		uwsgi_log("PADDING...\n");
-		rtp_len--;
-	}
+        if (padding) rtp_len--;
+
         uint32_t ts = 0;
         memcpy(&ts, rtp + 2, 4);
         rc->video_last_ts = ntohl(ts);
@@ -140,9 +138,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 
         if (len < 1) return -1;
 
-	if ((buf[0] & 0x1f) != 28) {
-		uwsgi_log("[AVC] type = %X %X type0=%u type1=%u marker=%u\n", buf[0], buf[1], buf[0] & 0x1f, buf[1] & 0x1f, marker);
-	}
+	uwsgi_log("[AVC] type = %X %X type0=%u type1=%u marker=%u (size: %u)\n", buf[0], buf[1], buf[0] & 0x1f, buf[1] & 0x1f, marker, rtp_len);
 
 	uint8_t nal_type = buf[0] & 0x1f;
 	uint8_t nal_base = buf[0] & 0xe0;
@@ -161,7 +157,6 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		ub->pos = 0;
 		buf++;
 		len--;		
-		uwsgi_log("[24] len = %d\n", len);
 		while(len > 2) {
 			// read nal size
 			uint16_t nal_size = uwsgi_be16(buf);
@@ -173,9 +168,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 				if (uwsgi_buffer_append(ub, rc->sprop->buf, rc->sprop->pos)) return -1;
 			}
 			if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
-			uwsgi_log("NAL = %u\n", buf[0] & 0x1f);
 			if (uwsgi_buffer_append(ub, buf, nal_size)) return -1;
-			uwsgi_log("[24/part] nal_size = %d\n", nal_size);
 			buf += nal_size;
 			len -= nal_size;
 		}
@@ -187,7 +180,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		if (len < 2) return -1;
 		// true type
 		nal_type = buf[1] & 0x1f;
-		uint8_t end_bit = (buf[1] >> 6) &0x01;
+		uint8_t end_bit = (buf[1] >> 6) & 0x01;
 		// is it the first packet ?
 		if (buf[1] & 0x80) {
 			ub->pos = 0;
