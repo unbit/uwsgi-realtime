@@ -28,17 +28,78 @@ extern struct uwsgi_server uwsgi;
 
 */
 
-static int consume_request_body(struct wsgi_request *wsgi_req) {
-	size_t remains = wsgi_req->post_cl;
-	while(remains > 0) {
-                ssize_t rlen = 0;
-                char *buf = uwsgi_request_body_read(wsgi_req, 8192, &rlen);
-                if (!buf) return -1;
-                if (buf == uwsgi.empty) break;
-		uwsgi_log("%.*s\n", rlen, buf);
-                remains -= rlen;
-        }
+static int sprop_decode(struct uwsgi_buffer *ub, char *buf, size_t len) {
+	size_t dst_len = 0;
+	char *dst = uwsgi_base64_decode(buf, len, &dst_len);
+	if (!dst) return -1;
+	if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) goto error;
+	if (uwsgi_buffer_append(ub, dst, dst_len)) goto error;
+	free(dst);
 	return 0;
+
+error:
+	free(dst);
+	return -1;
+}
+
+static int sprop_parse(struct realtime_config *rc, char *buf, size_t len) {
+	size_t i;
+	char *b64 = buf;
+	size_t b64_len = 0;
+	for(i=0;i<len;i++) {
+		if (buf[i] == ',') {
+			if (sprop_decode(rc->sprop, b64, b64_len)) return -1;
+			b64 = buf + i + 1;
+			b64_len = 0;
+		}
+		else {
+			b64_len++;
+		}
+	}
+
+	if (b64_len > 0) {
+		if (sprop_decode(rc->sprop, b64, b64_len)) return -1;
+	}
+	return 0;
+}
+
+int sdp_parse(struct realtime_config *rc, char *buf, size_t len) {
+	size_t i;
+	size_t line_len = 0;
+	char *line = buf;
+	rc->sprop = uwsgi_buffer_new(uwsgi.page_size);
+	for(i=0;i<len;i++) {
+		// end of the line ?
+		if (buf[i] == '\n') {
+			if (line_len > 0) {
+				if (line[line_len-1] == '\r') line_len--;
+			}
+			if (line_len > 21) {
+				line[line_len] = 0;
+				char *sprop = strstr(line, "sprop-parameter-sets=");
+				if (sprop) {
+					size_t sprop_len = strlen(sprop);
+					if (sprop_len > 21) {
+						if (sprop_parse(rc, sprop+21, sprop_len-21)) return -1;
+					}
+				}
+			}
+			line = buf + i + 1;
+			line_len = 0;
+		}
+		else {
+			line_len++;
+		}
+	}
+	return 0;
+}
+
+static int consume_request_body(struct wsgi_request *wsgi_req, struct realtime_config *rc) {
+	ssize_t rlen = 0;
+        char *buf = uwsgi_request_body_read(wsgi_req, wsgi_req->post_cl, &rlen);
+        if (!buf) return -1;
+        if (buf == uwsgi.empty) return -1;
+	return sdp_parse(rc, buf, rlen);
 }
 
 static ssize_t rtsp_find_rnrn(char *buf, size_t len) {
@@ -165,7 +226,7 @@ static int rtsp_parse(char *buf, size_t len, char **method, size_t *method_len, 
 	return 0;
 }
 
-static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, char **rtp, size_t *rtp_len, uint8_t *channel) {
+static ssize_t rtsp_manage(struct realtime_config *rc, struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, char **rtp, size_t *rtp_len, uint8_t *channel) {
 	char *buf = ub->buf;
 	size_t len = ub->pos;
 
@@ -174,7 +235,6 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
 		if (len < 4) return 0;
         	*channel = buf[1];
         	uint16_t pktsize = uwsgi_be16(buf + 2);
-		uwsgi_log("RTSP pktsize = %d\n", pktsize);
         	if (len < (size_t) (4 + pktsize)) return 0;
         	*rtp = buf + 4;
         	*rtp_len = pktsize;
@@ -242,7 +302,7 @@ static ssize_t rtsp_manage(struct uwsgi_buffer *ub, struct uwsgi_buffer *ub2, ch
                                 if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
                         }
                         if (uwsgi_buffer_append(ub2, "\r\n", 2)) return -1;
-			uwsgi_log("%d %.*s\n",cl,  cl, buf+rlen);
+			if (sdp_parse(rc, buf+rlen, cl)) return -1;
                         return rlen + cl;
 		}
 		else {
@@ -318,7 +378,7 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	else if (!uwsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "ANNOUNCE", 8)) {
 		// a body is required for ANNOUNCE
 		if (!wsgi_req->post_cl) goto end;
-		if (consume_request_body(wsgi_req)) goto end;
+		if (consume_request_body(wsgi_req, rc)) goto end;
 		if (uwsgi_response_prepare_headers(wsgi_req, "200 OK", 6)) goto end;
 		if (cseq) {
 			if (uwsgi_response_add_header(wsgi_req, "Cseq", 4, cseq, cseq_len)) goto end;
@@ -347,7 +407,7 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 	char *rtp = NULL;
         size_t rtp_len = 0;
         uint8_t channel = 0;
-        ssize_t ret = rtsp_manage(uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
+        ssize_t ret = rtsp_manage(rc, uor->ubuf, uor->ubuf1, &rtp, &rtp_len, &channel);
 	if (ret <= 0) return ret;
                                         if (rtp) {
                                                 if (channel == 0) {

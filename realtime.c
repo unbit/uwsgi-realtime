@@ -40,6 +40,9 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->tmp) free(rc->tmp);
 	if (rc->video_codec) free(rc->video_codec);
 	if (rc->audio_codec) free(rc->audio_codec);
+	if (rc->sprop) {
+		uwsgi_buffer_destroy(rc->sprop);
+	}
 	free(rc);
 }
 

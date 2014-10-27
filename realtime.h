@@ -51,6 +51,8 @@ struct realtime_config {
 	char *video_demuxer;
 	int (*video_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
+	struct uwsgi_buffer *sprop;
+
 	uint32_t video_last_ts;
 	char *video_codec;
 	uint8_t video_id;
