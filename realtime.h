@@ -48,6 +48,8 @@ struct realtime_config {
 
 	uint32_t ts;
 
+	char *video_channel_id;
+	uint8_t video_channel;
 	char *video_demuxer;
 	int (*video_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
@@ -59,10 +61,17 @@ struct realtime_config {
 	uint16_t width;
 	uint16_t height;
 
+	char *audio_channel_id;
+	uint8_t audio_channel;
+	char *audio_demuxer;
+        int (*audio_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 	char *audio_codec;
+	uint32_t audio_last_ts;
 	uint8_t audio_id;
 	uint8_t audio_channels;
 	uint16_t audio_freq;
+	uint16_t indexlength;
+	uint16_t sizelength;
 
 };
 
@@ -117,6 +126,7 @@ int realtime_rtsp_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request
 int realtime_rtp_png(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 int realtime_rtp_vp8(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 int realtime_rtp_h264(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
+int realtime_rtp_aac(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
 int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *, char *, size_t);
 int realtime_webm_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

@@ -24,9 +24,8 @@ int realtime_rtp_png(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	uint8_t marker = (rtp[1] >> 7) & 0x01;
 	uint8_t padding = (rtp[0] >> 5) & 0x01;
 	if (padding) rtp_len--;
-	uint32_t ts = 0;
-	memcpy(&ts, rtp + 2, 4);
-	ts = htonl(ts);
+	uint32_t ts = rc->video_last_ts;
+	rc->video_last_ts = uwsgi_be32(rtp+4);
 
 	size_t header_size = 12;
 
@@ -47,13 +46,13 @@ int realtime_rtp_png(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	return marker;
 }
 
+
 int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
 	uint8_t marker = (rtp[1] >> 7) & 0x01;
 	uint8_t padding = (rtp[0] >> 5) & 0x01;
 	if (padding) rtp_len--;
-        uint32_t ts = 0;
-        memcpy(&ts, rtp + 2, 4);
-        rc->video_last_ts = ntohl(ts);
+	uint32_t ts = rc->video_last_ts;
+        rc->video_last_ts = uwsgi_be32(rtp+4);
 
         size_t header_size = 12;
 
@@ -76,8 +75,8 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	uint8_t has_keyidx = 0;
 
 	if (extended && len < 2) return -1;
-	uint8_t start_of_partition = (buf[0] >> 4 ) & 0x01;
-	uint8_t pid = buf[0] & 0x7;
+	//uint8_t start_of_partition = (buf[0] >> 4 ) & 0x01;
+	//uint8_t pid = buf[0] & 0x7;
 	if (extended) {
 		header_size++;
 		has_pictureid = (buf[1] >> 7) & 0x01;
@@ -109,9 +108,15 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 
 	//uwsgi_log("[%u %u] marker = %u extended = %d pictureid = %u/%u start_of_partition %d partition %d header_size %d\n", rtp_len, rc->video_last_ts, marker, extended, pictureid, m, start_of_partition, pid, header_size);
 
+	/*
 	if (start_of_partition && pid == 0) {
 		ub->pos = 0;
 	}
+	*/
+
+	if (ts != rc->video_last_ts) {
+                ub->pos = 0;
+        }
 
 	if (uwsgi_buffer_append(ub, rtp + header_size, rtp_len - header_size)) return -1;
 
@@ -123,9 +128,8 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
         uint8_t padding = (rtp[0] >> 5) & 0x01;
         if (padding) rtp_len--;
 
-        uint32_t ts = 0;
-        memcpy(&ts, rtp + 2, 4);
-        rc->video_last_ts = ntohl(ts);
+	uint32_t ts = rc->video_last_ts;
+        rc->video_last_ts = uwsgi_be32(rtp+4);
 
         size_t header_size = 12;
 
@@ -138,23 +142,27 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 
         if (len < 1) return -1;
 
-	uwsgi_log("[AVC] type = %X %X type0=%u type1=%u marker=%u (size: %u)\n", buf[0], buf[1], buf[0] & 0x1f, buf[1] & 0x1f, marker, rtp_len);
+	//uwsgi_log("[AVC %u %u] type = %X %X type0=%u type1=%u marker=%u (size: %u)\n", rc->video_last_ts, uwsgi_be16(rtp+2),  buf[0], buf[1], buf[0] & 0x1f, buf[1] & 0x1f, marker, rtp_len);
 
 	uint8_t nal_type = buf[0] & 0x1f;
 	uint8_t nal_base = buf[0] & 0xe0;
 	if (nal_type <= 23) {
-		ub->pos = 0;
 		if (rc->sprop) {
 			if (uwsgi_buffer_append(ub, rc->sprop->buf, rc->sprop->pos)) return -1;
 		}
-		// append start code
+		if (rc->video_last_ts != ts) {
+			ub->pos = 0;
+			// append start code
+		}
 		if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 		if (uwsgi_buffer_append(ub, buf, len)) return -1;
-		marker = 1;
+		//marker = 1;
 	}
 	// STAP-A
 	else if (nal_type == 24) {
-		ub->pos = 0;
+		if (rc->video_last_ts != ts) {
+			ub->pos = 0;
+		}
 		buf++;
 		len--;		
 		while(len > 2) {
@@ -168,22 +176,25 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 				if (uwsgi_buffer_append(ub, rc->sprop->buf, rc->sprop->pos)) return -1;
 			}
 			if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
+			//uwsgi_log("NAL type = %u\n", buf[0] & 0x1f);
 			if (uwsgi_buffer_append(ub, buf, nal_size)) return -1;
 			buf += nal_size;
 			len -= nal_size;
 		}
-		marker = 1;
-		
+		//marker = 1;
 	}
 	// fragmented packet ?
 	else if (nal_type == 28 ) {
 		if (len < 2) return -1;
+		if (rc->video_last_ts != ts) {
+			ub->pos = 0;
+		}
 		// true type
 		nal_type = buf[1] & 0x1f;
-		uint8_t end_bit = (buf[1] >> 6) & 0x01;
+		//uint8_t end_bit = (buf[1] >> 6) & 0x01;
 		// is it the first packet ?
 		if (buf[1] & 0x80) {
-			ub->pos = 0;
+			//ub->pos = 0;
 			if (rc->sprop) {
 				if (uwsgi_buffer_append(ub, rc->sprop->buf, rc->sprop->pos)) return -1;
 			}
@@ -194,10 +205,70 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		}
 		buf += 2;
 		len -= 2;
-		marker = end_bit;
+		//marker = end_bit;
 		if (uwsgi_buffer_append(ub, buf, len)) return -1;
 	}
 	// other kind of NALs are skipped ...
 
+	return marker;
+}
+
+
+int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *rtp, size_t rtp_len) {
+        uint8_t marker = (rtp[1] >> 7) & 0x01;
+        uint8_t padding = (rtp[0] >> 5) & 0x01;
+        if (padding) rtp_len--;
+        uint32_t ts = rc->audio_last_ts;
+        rc->audio_last_ts = uwsgi_be32(rtp+4);
+
+        size_t header_size = 12;
+
+        uint8_t cc = rtp[0] & 0x0f;
+        header_size += cc * 4;
+
+	if (header_size >= rtp_len) return -1;
+
+        char *buf = rtp + header_size;
+        size_t len = rtp_len - header_size;
+
+	if (len < 2) return -1;
+
+	if (rc->indexlength+rc->sizelength == 0) return -1;
+
+	uint16_t au_bits = uwsgi_be16(buf);
+	uint16_t au_bytes = (au_bits + 7) / 8;
+
+	buf += 2;
+	len -= 2;
+
+	if (len < au_bytes) return -1;
+
+	if (au_bits % (rc->indexlength+rc->sizelength) > 0) return -1;
+
+	uint16_t au_n = au_bits / (rc->indexlength+rc->sizelength);
+
+	if (ts != rc->audio_last_ts) {
+                ub->pos = 0;
+        }
+
+	uint16_t i;
+	char *base = buf;
+	size_t remains = len - au_bytes;
+	char *pkt = buf + au_bytes;
+	for(i=0;i<au_n;i++) {
+		uint16_t au_size = uwsgi_be16(base);
+		au_size = au_size >> (16 - rc->sizelength);
+		if (au_size <= remains) {
+			if (uwsgi_buffer_append(ub, pkt, au_size)) return -1;
+			pkt += au_size;
+			remains -= au_size;
+			base += ((rc->indexlength+rc->sizelength) +7) / 8;
+			return 1;
+			continue;
+		}
+		return -1;
+	}
+
+	uwsgi_log("marker = %u\n", marker);
 	return marker;
 }

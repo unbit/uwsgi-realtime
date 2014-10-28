@@ -90,7 +90,7 @@ error:
 	return NULL;	
 }
 
-static int realtime_webm_track_video(struct uwsgi_buffer *ub, uint8_t id, char *codec, uint8_t fps, uint16_t width, uint16_t height) {
+int realtime_webm_track_video(struct uwsgi_buffer *ub, uint8_t id, char *codec, uint8_t fps, uint16_t width, uint16_t height) {
 	// avoid division by zero
 	if (!fps) fps = 30;
 
@@ -134,6 +134,55 @@ static int realtime_webm_track_video(struct uwsgi_buffer *ub, uint8_t id, char *
 	return 0;
 }
 
+union u_float64 {
+	uint64_t i;
+	double   f;
+};
+
+static int realtime_webm_track_audio(struct uwsgi_buffer *ub, uint8_t id, char *codec, uint16_t freq, uint8_t channels, uint8_t depth) {
+        if (uwsgi_buffer_u8(ub, 0xAE)) return -1;
+        size_t track_pos = ub->pos;
+        // leave space for size
+        ub->pos+=8;
+        // TrackNumber
+        if (uwsgi_buffer_append(ub, "\xd7\x81", 2)) return -1;
+        if (uwsgi_buffer_u8(ub, id)) return -1;
+        // TrackUID
+        if (uwsgi_buffer_append(ub, "\x73\xc5\x81", 3)) return -1;
+        if (uwsgi_buffer_u8(ub, id)) return -1;
+        // FlagLacing
+        if (uwsgi_buffer_append(ub, "\x9c\x81\x00", 3)) return -1;
+        // Language
+        if (uwsgi_buffer_append(ub, "\x22\xb5\x9c\x83und", 7)) return -1;
+        // CodecID
+        if (uwsgi_buffer_u8(ub, 0x86)) return -1;
+        if (realtime_webm_64bit(ub, strlen(codec))) return -1;
+        if (uwsgi_buffer_append(ub, codec, strlen(codec))) return -1;
+        // TrackType (audio)
+        if (uwsgi_buffer_append(ub, "\x83\x81\x02", 3)) return -1;
+        // Audio
+        if (uwsgi_buffer_append(ub, "\xE1\x91", 2)) return -1;
+        // Channels
+        if (uwsgi_buffer_append(ub, "\x9f\x81", 2)) return -1;
+        if (uwsgi_buffer_u8(ub, channels)) return -1;
+        // Freq
+        if (uwsgi_buffer_append(ub, "\xb5\x88", 2)) return -1;
+	union u_float64 freq_double;
+	freq_double.f = (double) freq;
+        if (uwsgi_buffer_u64be(ub, freq_double.i)) return -1;
+	// Depth
+        if (uwsgi_buffer_append(ub, "\x62\x64\x81", 3)) return -1;
+        if (uwsgi_buffer_u8(ub, depth)) return -1;
+
+        // fix track size
+        size_t current_pos = ub->pos;
+        ub->pos = track_pos;
+        if (realtime_webm_64bit(ub, (current_pos - track_pos)-8)) return -1;
+        ub->pos = current_pos;
+        return 0;
+}
+
+
 int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
         if (!wsgi_req->socket->can_offload) {
                 uwsgi_log("[realtime] unable to use \"webm\" router without offloading\n");
@@ -153,6 +202,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                         "server", &rc->server,
                         "subscribe", &rc->subscribe,
                         "video_codec", &rc->video_codec,
+                        "audio_codec", &rc->audio_codec,
                         NULL)) {
                         uwsgi_log("[realtime] unable to parse webm action\n");
                         realtime_destroy_config(rc);
@@ -180,7 +230,8 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	// leave space for tracks size
 	webm->pos += 8;
 
-	if (realtime_webm_track_video(webm, 1, rc->video_codec, 30, 320, 240)) {
+	//if (realtime_webm_track_video(webm, 1, rc->video_codec, 30, 320, 240)) {
+	if (realtime_webm_track_audio(webm, 1, rc->audio_codec, 22050, 1, 16)) {
 		uwsgi_buffer_destroy(webm);
 		goto end;
 	}

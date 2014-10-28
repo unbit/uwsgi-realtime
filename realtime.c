@@ -34,6 +34,9 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->boundary) free(rc->boundary);
 	if (rc->buffer_size_str) free(rc->buffer_size_str);
 	if (rc->video_demuxer) free(rc->video_demuxer);
+	if (rc->audio_demuxer) free(rc->audio_demuxer);
+	if (rc->video_channel_id) free(rc->video_channel_id);
+	if (rc->audio_channel_id) free(rc->audio_channel_id);
 	if (rc->sid) free(rc->sid);
 	if (rc->src) free(rc->src);
 	if (rc->dst) free(rc->dst);
@@ -75,6 +78,15 @@ int realtime_redis_offload(struct wsgi_request *wsgi_req, struct realtime_config
 	if (!rc->buffer_size) {
 		rc->buffer_size = 4096;
 	}
+
+	if (rc->video_channel_id) {
+		rc->video_channel = atoi(rc->video_channel_id);
+	}
+
+	if (rc->audio_channel_id) {
+		rc->audio_channel = atoi(rc->audio_channel_id);
+	}
+
 	uor.data = rc;
         uor.name = rc->server;
 	uor.ubuf = uwsgi_buffer_new(uwsgi.page_size);

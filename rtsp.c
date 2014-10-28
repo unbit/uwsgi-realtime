@@ -56,6 +56,9 @@ static int sprop_parse(struct realtime_config *rc, char *buf, size_t len) {
 			b64 = buf + i + 1;
 			b64_len = 0;
 		}
+		else if (buf[i] == ';') {
+			break;
+		}
 		else {
 			b64_len++;
 		}
@@ -68,12 +71,55 @@ static int sprop_parse(struct realtime_config *rc, char *buf, size_t len) {
 	return 0;
 }
 
+static int indexlength_parse(struct realtime_config *rc, char *buf, size_t len) {
+        size_t i;
+        char *s = buf;
+        size_t s_len = 0;
+        for (i = 0; i < len; i++) {
+                if (buf[i] == ';') {
+			rc->indexlength = uwsgi_str_num(s, s_len);
+                        break;
+                }
+                else {
+                        s_len++;
+                }
+        }
+
+        if (s_len > 0) {
+		rc->indexlength = uwsgi_str_num(s, s_len);
+        }
+        return 0;
+}
+
+static int sizelength_parse(struct realtime_config *rc, char *buf, size_t len) {
+        size_t i;
+        char *s = buf;
+        size_t s_len = 0;
+        for (i = 0; i < len; i++) {
+                if (buf[i] == ';') {
+                        rc->sizelength = uwsgi_str_num(s, s_len);
+                        break;
+                }
+                else {
+                        s_len++;
+                }
+        }
+
+        if (s_len > 0) {
+                rc->sizelength = uwsgi_str_num(s, s_len);
+        }
+        return 0;
+}
+
 int sdp_parse(struct realtime_config *rc, char *buf, size_t len) {
 	uwsgi_log("%.*s\n", len, buf);
 	size_t i;
 	size_t line_len = 0;
 	char *line = buf;
-	rc->sprop = uwsgi_buffer_new(uwsgi.page_size);
+	if (!rc->sprop) {
+		rc->sprop = uwsgi_buffer_new(uwsgi.page_size);
+	}
+	rc->sprop->pos = 0;
 	for (i = 0; i < len; i++) {
 		// end of the line ?
 		if (buf[i] == '\n') {
@@ -92,6 +138,31 @@ int sdp_parse(struct realtime_config *rc, char *buf, size_t len) {
 					}
 				}
 			}
+
+			if (line_len > 12) {
+				line[line_len] = 0;
+                                char *indexlength = strstr(line, "indexlength=");
+                                if (indexlength) {
+                                        size_t indexlength_len = strlen(indexlength);
+                                        if (indexlength_len > 12) {
+                                                if (indexlength_parse(rc, indexlength + 12, indexlength_len-12))
+                                                        return -1;
+                                        }
+                                }
+			}
+
+			if (line_len > 11) {
+                                line[line_len] = 0;
+                                char *sizelength = strstr(line, "sizelength=");
+                                if (sizelength) {
+                                        size_t sizelength_len = strlen(sizelength);
+                                        if (sizelength_len > 11) {
+                                                if (sizelength_parse(rc, sizelength + 11, sizelength_len-11))
+                                                        return -1;
+                                        }
+                                }
+                        }
+
 			line = buf + i + 1;
 			line_len = 0;
 		}
@@ -381,7 +452,14 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 
 	struct realtime_config *rc = uwsgi_calloc(sizeof(struct realtime_config));
 	if (strchr(ub->buf, '=')) {
-		if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=', "server", &rc->server, "publish", &rc->publish, "video_demuxer", &rc->video_demuxer, NULL)) {
+		if (uwsgi_kvlist_parse(ub->buf, ub->pos, ',', '=',
+			"server", &rc->server,
+			"publish", &rc->publish,
+			"video_channel", &rc->video_channel_id,
+			"audio_channel", &rc->audio_channel_id,
+			"video_demuxer", &rc->video_demuxer,
+			"audio_demuxer", &rc->audio_demuxer,
+			NULL)) {
 			uwsgi_log("[realtime] unable to parse stream action\n");
 			goto end;
 		}
@@ -404,6 +482,16 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 			uwsgi_log("[realtime] invalid video demuxer: %s\n", rc->video_demuxer);
 			goto end;
 		}
+	}
+
+	if (rc->audio_demuxer) {
+		if (!strcmp(rc->audio_demuxer, "aac")) {
+                        rc->audio_rtp_demuxer = realtime_rtp_aac;
+                }
+		else {
+                        uwsgi_log("[realtime] invalid audio demuxer: %s\n", rc->audio_demuxer);
+                        goto end;
+                }
 	}
 
 	uint16_t cseq_len = 0;
@@ -465,7 +553,7 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 		return ret;
 	
 	if (rtp) {
-		if (channel == 0) {
+		if (channel == rc->video_channel) {
 			if (rc->video_rtp_demuxer) {
 				int rtp_ret = rc->video_rtp_demuxer(rc, uor->ubuf3, rtp, rtp_len);
 				if (uwsgi_buffer_decapitate(uor->ubuf, ret))
@@ -490,6 +578,32 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 				return -1;
 			if (event_queue_fd_read_to_write(ut->queue, uor->fd))
 				return -1;
+		}
+		else if (channel == rc->audio_channel) {
+			if (rc->audio_rtp_demuxer) {
+                                int rtp_ret = rc->audio_rtp_demuxer(rc, uor->ubuf4, rtp, rtp_len);
+                                if (uwsgi_buffer_decapitate(uor->ubuf, ret))
+                                        return -1;
+                                if (rtp_ret < 0)
+                                        return -1;
+                                // more data ?
+                                if (rtp_ret == 0)
+                                        return rtsp_check(ut, uor);
+                                if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf4->buf, uor->ubuf4->pos, rc))
+                                        return -1;
+                        }
+                        else {
+                                if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc))
+                                        return -1;
+                                if (uwsgi_buffer_decapitate(uor->ubuf, ret))
+                                        return -1;
+                        }
+                        uor->status = 3;
+                        uor->written = 0;
+                        if (event_queue_del_fd(ut->queue, uor->s, event_queue_read()))
+                                return -1;
+                        if (event_queue_fd_read_to_write(ut->queue, uor->fd))
+                                return -1;
 		}
 		else {
 			if (uwsgi_buffer_decapitate(uor->ubuf, ret))
