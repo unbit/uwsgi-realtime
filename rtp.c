@@ -263,7 +263,7 @@ int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 		uint16_t au_size = uwsgi_be16(base);
 		au_size = au_size >> (16 - rc->sizelength);
 		if (au_size <= remains) {
-			uint8_t profile = 1;
+			uint8_t profile = 15;
 			uint8_t freq = 4;
 			uint8_t chan = 2;
 			uint8_t adts[7];

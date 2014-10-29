@@ -271,7 +271,7 @@ int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *ub, c
 	// CLUSTER timecode
 	//if (uwsgi_buffer_u32be(ub, rc->video_last_ts - rc->start_ts)) return -1;
 	if (uwsgi_buffer_u32be(ub, rc->ts)) return -1;
-	rc->ts += 33;
+	rc->ts += 1000;
 	// simpleblock
 	if (uwsgi_buffer_append(ub, "\xA3", 1)) return -1;
 	if (realtime_webm_64bit(ub, len + 4)) return -1;
