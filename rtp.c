@@ -131,6 +131,8 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 	uint32_t ts = rc->video_last_ts;
         rc->video_last_ts = uwsgi_be32(rtp+4);
 
+	uwsgi_log("[H264] ts = %u\n", rc->video_last_ts);
+
         size_t header_size = 12;
 
         uint8_t cc = rtp[0] & 0x0f;
@@ -221,6 +223,8 @@ int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
         uint32_t ts = rc->audio_last_ts;
         rc->audio_last_ts = uwsgi_be32(rtp+4);
 
+	uwsgi_log("[AAC] ts = %u\n", rc->audio_last_ts);
+
         size_t header_size = 12;
 
         uint8_t cc = rtp[0] & 0x0f;
@@ -259,16 +263,29 @@ int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 		uint16_t au_size = uwsgi_be16(base);
 		au_size = au_size >> (16 - rc->sizelength);
 		if (au_size <= remains) {
+			uint8_t profile = 1;
+			uint8_t freq = 4;
+			uint8_t chan = 2;
+			uint8_t adts[7];
+			uint16_t pktlen = au_size + 7;
+			adts[0] = 0xff;
+			adts[1] = 0xf1;
+			// 2 bits profile + 4 bits freq + 1 bit private (0) + 1 bit first part of 3 bit channel
+			adts[2] = ((profile-1) << 6) + (freq << 2) + (chan >> 2);
+			// 2 bits channel (second part)  
+			adts[3] = ((chan & 0x03) << 6) + (pktlen>>11);
+			adts[4] = (pktlen & 0x7FF) >> 3;
+			adts[5] = ((pktlen&7)<<5) + 0x1F;
+			adts[6] = 0xFC;
+			if (uwsgi_buffer_append(ub, (char *)adts, 7)) return -1;
 			if (uwsgi_buffer_append(ub, pkt, au_size)) return -1;
 			pkt += au_size;
 			remains -= au_size;
 			base += ((rc->indexlength+rc->sizelength) +7) / 8;
-			return 1;
 			continue;
 		}
 		return -1;
 	}
 
-	uwsgi_log("marker = %u\n", marker);
 	return marker;
 }
