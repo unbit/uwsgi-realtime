@@ -35,6 +35,9 @@ int realtime_rtp_png(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 	// a new image is starting
 	if (ts != rc->video_last_ts) {
 		ub->pos = 0;
+		if (rc->track_prefix) {
+			if (uwsgi_buffer_u8(ub, rc->video_channel)) return -1;
+		}
 	}
 
 	rc->video_last_ts = ts;
@@ -116,6 +119,9 @@ int realtime_rtp_vp8(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 
 	if (ts != rc->video_last_ts) {
                 ub->pos = 0;
+		if (rc->track_prefix) {
+			if (uwsgi_buffer_u8(ub, rc->video_channel)) return -1;
+		}
         }
 
 	if (uwsgi_buffer_append(ub, rtp + header_size, rtp_len - header_size)) return -1;
@@ -154,7 +160,9 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		}
 		if (rc->video_last_ts != ts) {
 			ub->pos = 0;
-			// append start code
+			if (rc->track_prefix) {
+				if (uwsgi_buffer_u8(ub, rc->video_channel)) return -1;
+			}
 		}
 		if (uwsgi_buffer_append(ub, "\0\0\0\1", 4)) return -1;
 		if (uwsgi_buffer_append(ub, buf, len)) return -1;
@@ -164,6 +172,9 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 	else if (nal_type == 24) {
 		if (rc->video_last_ts != ts) {
 			ub->pos = 0;
+			if (rc->track_prefix) {
+				if (uwsgi_buffer_u8(ub, rc->video_channel)) return -1;
+			}
 		}
 		buf++;
 		len--;		
@@ -190,6 +201,9 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 		if (len < 2) return -1;
 		if (rc->video_last_ts != ts) {
 			ub->pos = 0;
+			if (rc->track_prefix) {
+				if (uwsgi_buffer_u8(ub, rc->video_channel)) return -1;
+			}
 		}
 		// true type
 		nal_type = buf[1] & 0x1f;
@@ -253,6 +267,9 @@ int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
 
 	if (ts != rc->audio_last_ts) {
                 ub->pos = 0;
+		if (rc->track_prefix) {
+			if (uwsgi_buffer_u8(ub, rc->audio_channel)) return -1;
+		}
         }
 
 	uint16_t i;

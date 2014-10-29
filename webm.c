@@ -203,6 +203,7 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
                         "subscribe", &rc->subscribe,
                         "video_codec", &rc->video_codec,
                         "audio_codec", &rc->audio_codec,
+                        "track_prefix", &rc->track_prefix,
                         NULL)) {
                         uwsgi_log("[realtime] unable to parse webm action\n");
                         realtime_destroy_config(rc);
@@ -230,8 +231,16 @@ int webm_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 	// leave space for tracks size
 	webm->pos += 8;
 
-	//if (realtime_webm_track_video(webm, 1, rc->video_codec, 30, 320, 240)) {
-	if (realtime_webm_track_audio(webm, 1, rc->audio_codec, 22050, 1, 16)) {
+	uint8_t track_id = 1;
+	if (rc->audio_codec) {
+		if (realtime_webm_track_audio(webm, track_id, rc->audio_codec, 44100, 1, 16)) {
+			uwsgi_buffer_destroy(webm);
+			goto end;
+		}
+		track_id++;
+	}
+
+	if (realtime_webm_track_video(webm, track_id, rc->video_codec, 30, 320, 240)) {
 		uwsgi_buffer_destroy(webm);
 		goto end;
 	}
@@ -262,21 +271,21 @@ end:
         return UWSGI_ROUTE_BREAK;
 }
 
-int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *ub, char *buf, size_t len) {
+int realtime_webm_cluster(struct realtime_config *rc, uint8_t track_id, uint32_t delta_ts, struct uwsgi_buffer *ub, char *buf, size_t len) {
 	if (uwsgi_buffer_append(ub, "\x1F\x43\xB6\x75", 4)) return -1;
 	size_t cluster_pos = ub->pos;
 	ub->pos += 8;
 	// CLUSTER
 	if (uwsgi_buffer_append(ub, "\xE7\x84", 2)) return -1;
 	// CLUSTER timecode
-	//if (uwsgi_buffer_u32be(ub, rc->video_last_ts - rc->start_ts)) return -1;
 	if (uwsgi_buffer_u32be(ub, rc->ts)) return -1;
-	rc->ts += 1000;
+	rc->ts += delta_ts;
 	// simpleblock
 	if (uwsgi_buffer_append(ub, "\xA3", 1)) return -1;
 	if (realtime_webm_64bit(ub, len + 4)) return -1;
-	// keyframe
-	if (uwsgi_buffer_append(ub, "\x81\x00\x00\x80", 4)) return -1;
+	if (uwsgi_buffer_u8(ub, 0x80 | track_id)) return -1;
+	// timecode + keyframe
+	if (uwsgi_buffer_append(ub, "\x00\x00\x80", 3)) return -1;
 	// payload
 	if (uwsgi_buffer_append(ub, buf, len)) return -1;
 	size_t current_pos = ub->pos;
@@ -326,7 +335,17 @@ int realtime_webm_offload_do(struct uwsgi_thread *ut, struct uwsgi_offload_reque
 						}
 						// ... if not, mux it
 						else {
-                                                	if (realtime_webm_cluster(rc, uor->ubuf1, message, message_len)) return -1;
+							if (rc->track_prefix) {
+								uint8_t track_id = (uint8_t) message[0];
+								uint32_t delta_ts = 33;
+								if (track_id == 0) track_id = 1;
+								if (track_id == 1) delta_ts = 1000;
+								uwsgi_log("track_id = %u ts = %u\n", track_id, delta_ts);
+                                                		if (realtime_webm_cluster(rc, track_id, delta_ts, uor->ubuf1, message+1, message_len-1)) return -1;
+							}
+							else {
+                                                		if (realtime_webm_cluster(rc, 0, 33, uor->ubuf1, message, message_len)) return -1;
+							}
 						}
                                                 if (event_queue_del_fd(ut->queue, uor->fd, event_queue_read()))
                                                         return -1;

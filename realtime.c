@@ -37,6 +37,7 @@ void realtime_destroy_config(struct realtime_config *rc) {
 	if (rc->audio_demuxer) free(rc->audio_demuxer);
 	if (rc->video_channel_id) free(rc->video_channel_id);
 	if (rc->audio_channel_id) free(rc->audio_channel_id);
+	if (rc->track_prefix) free(rc->track_prefix);
 	if (rc->sid) free(rc->sid);
 	if (rc->src) free(rc->src);
 	if (rc->dst) free(rc->dst);

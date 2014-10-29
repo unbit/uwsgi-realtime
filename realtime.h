@@ -48,6 +48,8 @@ struct realtime_config {
 
 	uint32_t ts;
 
+	char *track_prefix;
+
 	char *video_channel_id;
 	uint8_t video_channel;
 	char *video_demuxer;
@@ -128,5 +130,5 @@ int realtime_rtp_vp8(struct realtime_config *, struct uwsgi_buffer *, char *, si
 int realtime_rtp_h264(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 int realtime_rtp_aac(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
-int realtime_webm_cluster(struct realtime_config *rc, struct uwsgi_buffer *, char *, size_t);
+int realtime_webm_cluster(struct realtime_config *rc, uint8_t, uint32_t, struct uwsgi_buffer *, char *, size_t);
 int realtime_webm_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);

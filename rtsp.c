@@ -459,6 +459,7 @@ int rtsp_router_func(struct wsgi_request *wsgi_req, struct uwsgi_route *ur) {
 			"audio_channel", &rc->audio_channel_id,
 			"video_demuxer", &rc->video_demuxer,
 			"audio_demuxer", &rc->audio_demuxer,
+			"track_prefix", &rc->track_prefix,
 			NULL)) {
 			uwsgi_log("[realtime] unable to parse stream action\n");
 			goto end;
