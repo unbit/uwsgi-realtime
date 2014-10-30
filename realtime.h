@@ -55,6 +55,9 @@ struct realtime_config {
 	char *video_demuxer;
 	int (*video_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 
+	uint64_t video_rtcp_ntp;
+	uint32_t video_rtcp_ts;
+
 	struct uwsgi_buffer *sprop;
 
 	uint32_t video_last_ts;
@@ -68,6 +71,10 @@ struct realtime_config {
 	char *audio_demuxer;
         int (*audio_rtp_demuxer)(struct realtime_config *, struct uwsgi_buffer *, char *, size_t);
 	char *audio_codec;
+
+	uint64_t audio_rtcp_ntp;
+	uint32_t audio_rtcp_ts;
+
 	uint32_t audio_last_ts;
 	uint8_t audio_id;
 	uint8_t audio_channels;
@@ -132,3 +139,11 @@ int realtime_rtp_aac(struct realtime_config *, struct uwsgi_buffer *, char *, si
 
 int realtime_webm_cluster(struct realtime_config *rc, uint8_t, uint32_t, struct uwsgi_buffer *, char *, size_t);
 int realtime_webm_offload_do(struct uwsgi_thread *, struct uwsgi_offload_request *, int);
+
+int realtime_redis_rtp_publish(struct uwsgi_buffer *, uint8_t, uint64_t, char *, size_t, struct realtime_config *);
+
+int rtcp_video_parse(struct realtime_config *, char *, size_t);
+int rtcp_audio_parse(struct realtime_config *, char *, size_t);
+
+uint64_t rtcp_video_ts(struct realtime_config *, char *);
+uint64_t rtcp_audio_ts(struct realtime_config *, char *);

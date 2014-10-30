@@ -137,7 +137,7 @@ int realtime_rtp_h264(struct realtime_config *rc, struct uwsgi_buffer *ub, char 
 	uint32_t ts = rc->video_last_ts;
         rc->video_last_ts = uwsgi_be32(rtp+4);
 
-	uwsgi_log("[H264] ts = %u\n", rc->video_last_ts);
+	//uwsgi_log("[H264] ts = %u\n", rc->video_last_ts);
 
         size_t header_size = 12;
 
@@ -237,7 +237,7 @@ int realtime_rtp_aac(struct realtime_config *rc, struct uwsgi_buffer *ub, char *
         uint32_t ts = rc->audio_last_ts;
         rc->audio_last_ts = uwsgi_be32(rtp+4);
 
-	uwsgi_log("[AAC] ts = %u\n", rc->audio_last_ts);
+	//uwsgi_log("[AAC] ts = %u\n", rc->audio_last_ts);
 
         size_t header_size = 12;
 

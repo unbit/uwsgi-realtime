@@ -232,6 +232,22 @@ int realtime_redis_build_publish(struct uwsgi_buffer *ub, char *buf, size_t len,
 	return 0;
 }
 
+int realtime_redis_rtp_publish(struct uwsgi_buffer *ub, uint8_t channel, uint64_t ts, char *buf, size_t len, struct realtime_config *rc) {
+        if (!rc->publish_len) return -1;
+        if (uwsgi_buffer_append(ub, "*3\r\n$7\r\nPUBLISH\r\n$", 18)) return -1;
+        if (uwsgi_buffer_num64(ub, rc->publish_len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+        if (uwsgi_buffer_append(ub, rc->publish, rc->publish_len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n$", 3)) return -1;
+        if (uwsgi_buffer_num64(ub, 9 + len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+	if (uwsgi_buffer_u8(ub, channel)) return -1;
+	if (uwsgi_buffer_u64be(ub, ts)) return -1;
+        if (uwsgi_buffer_append(ub, buf, len)) return -1;
+        if (uwsgi_buffer_append(ub, "\r\n", 2)) return -1;
+        return 0;
+}
+
 int realtime_redis_publish(struct realtime_config *rc, char *buf, size_t len) {
 	struct uwsgi_buffer *ub = uwsgi_buffer_new(uwsgi.page_size);
 	if (realtime_redis_build_publish(ub, buf, len, rc)) goto error;	

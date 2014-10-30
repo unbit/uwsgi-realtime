@@ -564,8 +564,15 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 				// more data ?
 				if (rtp_ret == 0)
 					return rtsp_check(ut, uor);
-				if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf3->buf, uor->ubuf3->pos, rc))
-					return -1;
+				if (rc->track_prefix) {
+					uint64_t pts = rtcp_video_ts(rc, rtp);
+					if (realtime_redis_rtp_publish(uor->ubuf1, channel, pts, uor->ubuf3->buf, uor->ubuf3->pos, rc))
+						return -1;
+				}
+				else {
+					if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf3->buf, uor->ubuf3->pos, rc))
+						return -1;
+				}
 			}
 			else {
 				if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc))
@@ -580,6 +587,14 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
 			if (event_queue_fd_read_to_write(ut->queue, uor->fd))
 				return -1;
 		}
+		// video rtcp ?
+		else if (channel == rc->video_channel+1) {
+			if (rtcp_video_parse(rc, rtp, rtp_len)) return -1;
+			if (uwsgi_buffer_decapitate(uor->ubuf, ret))
+                                return -1;
+                        // again
+                        return rtsp_check(ut, uor);
+		}
 		else if (channel == rc->audio_channel) {
 			if (rc->audio_rtp_demuxer) {
                                 int rtp_ret = rc->audio_rtp_demuxer(rc, uor->ubuf4, rtp, rtp_len);
@@ -590,8 +605,15 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
                                 // more data ?
                                 if (rtp_ret == 0)
                                         return rtsp_check(ut, uor);
-                                if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf4->buf, uor->ubuf4->pos, rc))
-                                        return -1;
+				if (rc->track_prefix) {
+					uint64_t pts = rtcp_audio_ts(rc, rtp);
+                                	if (realtime_redis_rtp_publish(uor->ubuf1, channel, pts , uor->ubuf4->buf, uor->ubuf4->pos, rc))
+                                        	return -1;
+				}
+				else {
+                                	if (realtime_redis_build_publish(uor->ubuf1, uor->ubuf4->buf, uor->ubuf4->pos, rc))
+                                        	return -1;
+				}
                         }
                         else {
                                 if (realtime_redis_build_publish(uor->ubuf1, rtp, rtp_len, rc))
@@ -605,6 +627,14 @@ int rtsp_check(struct uwsgi_thread *ut, struct uwsgi_offload_request *uor) {
                                 return -1;
                         if (event_queue_fd_read_to_write(ut->queue, uor->fd))
                                 return -1;
+		}
+		// audio rtcp ?
+		else if (channel == rc->audio_channel+1) {
+			if (rtcp_audio_parse(rc, rtp, rtp_len)) return -1;
+			if (uwsgi_buffer_decapitate(uor->ubuf, ret))
+                                return -1;
+                        // again
+                        return rtsp_check(ut, uor);
 		}
 		else {
 			if (uwsgi_buffer_decapitate(uor->ubuf, ret))
