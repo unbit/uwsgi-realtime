@@ -5,6 +5,13 @@ uwsgi-realtime
 
 a uWSGI plugin exposing offloaded realtime features like SSE, socket.io and media streaming
 
+This is a 'beta-quality' repository for experimenting with advanced uWSGI offloading feature. When a feature is 
+considered 'stable' it is released as a dedicated plugin.
+
+Currently the following features landed to a dedicated plugin:
+
+* SSE https://github.com/unbit/uwsgi-sse-offload
+
 Why ?
 =====
 
